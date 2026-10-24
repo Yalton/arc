@@ -261,8 +261,9 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
 
 Exact payload formats are pinned per harness at implementation time and
 covered by fixture tests (Claude Code `PreToolUse`/`PostToolUse`; Codex hooks
-— `codex features list` reports `hooks` stable; opencode plugin
-`tool.execute.before`/`after` via a small JS shim in `adapters/opencode`).
+— `codex features list` reports `hooks` stable; opencode v2 plugin
+`ctx.tool.hook("execute.before"/"execute.after")` via a small JS shim in
+`adapters/opencode`, installed as `.opencode/plugins/arc.js`).
 
 ### `arc triage [<bead-id>... | --new]` (beads only)
 

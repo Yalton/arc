@@ -18,6 +18,8 @@ func runHook(out *output, args []string) int {
 			return hook.Claude(os.Stdin, out.stdout, out.stderr, time.Now().UTC())
 		case "codex":
 			return hook.Codex(os.Stdin, out.stdout, out.stderr, time.Now().UTC())
+		case "opencode":
+			return hook.Opencode(os.Stdin, out.stdout, out.stderr, time.Now().UTC())
 		}
 	}
 	// A misconfigured hook must not block the agent: report on stderr and
@@ -26,6 +28,6 @@ func runHook(out *output, args []string) int {
 	if len(args) > 0 {
 		harness = args[0]
 	}
-	fmt.Fprintf(out.stderr, "arc hook: unsupported harness %s (supported: claude, codex); allowing\n", harness)
+	fmt.Fprintf(out.stderr, "arc hook: unsupported harness %s (supported: claude, codex, opencode); allowing\n", harness)
 	return exitOK
 }

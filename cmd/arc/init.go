@@ -15,18 +15,13 @@ func runInit(out *output, args []string) int {
 	fs.BoolVar(&opts.Scan, "scan", false, "propose one draft concept per package directory")
 	fs.BoolVar(&opts.Claude, "claude", false, "install the Claude Code hook adapter")
 	fs.BoolVar(&opts.Codex, "codex", false, "install the Codex hook adapter")
-	fs.Bool("opencode", false, "not implemented until a later milestone")
+	fs.BoolVar(&opts.Opencode, "opencode", false, "install the opencode plugin shim")
 	fs.StringVar(&opts.CI, "ci", "", "write a CI workflow running arc gate: github or gitea")
 	if err := fs.Parse(args); err != nil {
 		return out.fail(exitUsage, "init: "+err.Error())
 	}
 	if fs.NArg() > 0 {
 		return out.fail(exitUsage, "init: unexpected arguments")
-	}
-	unsupported := false
-	fs.Visit(func(f *flag.Flag) { unsupported = unsupported || f.Name == "opencode" })
-	if unsupported {
-		return out.fail(exitUsage, "init: --opencode is not implemented yet")
 	}
 	root, err := repoRoot()
 	if err != nil {

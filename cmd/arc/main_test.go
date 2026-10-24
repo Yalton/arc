@@ -71,7 +71,7 @@ func TestExtractJSONFlagStopsAtDoubleDash(t *testing.T) {
 }
 
 func TestHookUnsupportedHarnessNeverBlocks(t *testing.T) {
-	for _, args := range [][]string{{"hook"}, {"hook", "opencode"}, {"hook", "bogus"}} {
+	for _, args := range [][]string{{"hook"}, {"hook", "bogus"}} {
 		if code, _, errOut := runArc(args...); code != exitOK || !strings.Contains(errOut, "unsupported harness") {
 			t.Errorf("%v: code %d stderr %q", args, code, errOut)
 		}

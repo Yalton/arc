@@ -1,0 +1,1 @@
+{"hook":"execute.before","tool":"patch","session_id":"ses_e90a064d2ffeNOw86foVlLxBoS","call_id":"Qm3kTq0cUu1v8a7iYyQyJpVYgk1BvJ2s","directory":"{{ROOT}}","input":{"patchText":"*** Begin Patch\n*** Update File: internal/goal/goal.go\n@@\n-package goal\n+package goal // x\n*** Add File: internal/foo/x.go\n+package foo\n*** End Patch"}}

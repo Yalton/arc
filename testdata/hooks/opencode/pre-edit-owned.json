@@ -1,0 +1,1 @@
+{"hook":"execute.before","tool":"edit","session_id":"ses_e90a064d2ffeNOw86foVlLxBoS","call_id":"HwfxUYLt011uW0RNtQQmD1etiKFs0dhA","directory":"{{ROOT}}","input":{"path":"internal/goal/goal.go","oldString":"package goal","newString":"package goal // x"}}
