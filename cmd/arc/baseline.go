@@ -1,0 +1,42 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	"arc/internal/gate"
+)
+
+// runBaseline records an external check's current findings as accepted
+// (SPEC.md, "arc baseline").
+func runBaseline(out *output, args []string) int {
+	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
+		return out.fail(exitUsage, "baseline: usage: arc baseline <check-id>")
+	}
+	r, err := openRepo()
+	if err != nil {
+		return out.fail(exitUsage, err.Error())
+	}
+	k := gate.ExternalCheck(r.reg, args[0])
+	if k == nil {
+		var ids []string
+		for _, c := range r.reg.Checks {
+			ids = append(ids, c.ID)
+		}
+		known := "none; add one under checks in .arch/registry.yaml"
+		if len(ids) > 0 {
+			known = strings.Join(ids, ", ")
+		}
+		return out.fail(exitUsage, fmt.Sprintf("baseline: unknown check %q (known: %s)", args[0], known))
+	}
+	if !k.Baseline {
+		return out.fail(exitUsage, fmt.Sprintf("baseline: checks[%s] has baseline: false, so a baseline would be ignored. Set baseline: true first.", k.ID))
+	}
+	res, err := gate.RecordBaseline(r.root, *k)
+	if err != nil {
+		return out.fail(exitUsage, "baseline: "+err.Error())
+	}
+	out.result(fmt.Sprintf("%s: %d finding(s) accepted in %s (%d added, %d removed)",
+		res.Check, res.Findings, res.Path, res.Added, res.Removed), res)
+	return exitOK
+}
