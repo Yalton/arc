@@ -134,7 +134,10 @@ func TestRepoFilesWalkOutsideGit(t *testing.T) {
 
 func TestBuiltinIgnore(t *testing.T) {
 	r := &Registry{}
-	for _, p := range []string{".arch/registry.yaml", "ARCHITECTURE.md", "AGENTS.md", "CLAUDE.md"} {
+	for _, p := range []string{
+		".arch/registry.yaml", "ARCHITECTURE.md", "AGENTS.md", "CLAUDE.md",
+		".claude/settings.json", ".codex/hooks.json", ".opencode/plugins/arc.js",
+	} {
 		if !r.IsIgnored(p) {
 			t.Errorf("%s not ignored", p)
 		}

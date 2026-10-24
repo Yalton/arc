@@ -179,7 +179,10 @@ architect agent; `gate` warns while drafts exist.
 
 For each path: the owning concept, or exit 1 with "unowned" and the three
 closest concepts (by shared path prefix, then alias match on path segments).
-Ignored paths report `ignored`.
+Ignored paths report `ignored`. Besides the registry's `ignore` list, arc
+always ignores the files it manages or installs: `.arch/**`,
+`ARCHITECTURE.md`, the root `AGENTS.md` and `CLAUDE.md`, and the harness
+adapter directories `.claude/**`, `.codex/**` and `.opencode/**`.
 
 ### `arc brief [<path>... | --bead <id> | --concept <id>]`
 

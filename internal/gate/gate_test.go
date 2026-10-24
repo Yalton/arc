@@ -46,6 +46,19 @@ func TestPlacementOwnedAndIgnoredPass(t *testing.T) {
 	}
 }
 
+// Adapter files installed by init pass placement even when the registry
+// predates the skeleton's ignore entries for them.
+func TestPlacementAdapterDirsBuiltinIgnored(t *testing.T) {
+	r := setup(t)
+	r.write(".opencode/plugins/arc.js", "export default {}\n")
+	r.write(".claude/settings.json", "{}\n")
+	r.write(".codex/hooks.json", "{}\n")
+	r.git("add", "-A")
+	if rep := r.gate("staged", "placement"); rep.Errors != 0 {
+		t.Fatalf("unexpected:\n%s", findings(rep))
+	}
+}
+
 func TestPlacementPreExistingOnlyFailsWithAll(t *testing.T) {
 	r := setup(t)
 	r.write("internal/goal/goal.go", "package goal\n\nvar X = 1\n")

@@ -140,8 +140,13 @@ func (r *Registry) Owner(path string) *Concept {
 	return nil
 }
 
-// BuiltinIgnore lists files arc itself manages; they are always ignored.
-var BuiltinIgnore = []string{".arch/**", ArchitectureFile, "AGENTS.md", "CLAUDE.md"}
+// BuiltinIgnore lists files arc itself manages or installs (including the
+// harness adapter directories init writes into); they are always ignored, so
+// registries written before an adapter existed still pass placement.
+var BuiltinIgnore = []string{
+	".arch/**", ArchitectureFile, "AGENTS.md", "CLAUDE.md",
+	".claude/**", ".codex/**", ".opencode/**",
+}
 
 // IsIgnored reports whether path is exempt from placement checks.
 func (r *Registry) IsIgnored(path string) bool {
