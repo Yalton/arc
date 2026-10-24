@@ -14,9 +14,8 @@ func runInit(out *output, args []string) int {
 	var opts initcmd.Options
 	fs.BoolVar(&opts.Scan, "scan", false, "propose one draft concept per package directory")
 	fs.BoolVar(&opts.Claude, "claude", false, "install the Claude Code hook adapter")
-	for _, f := range []string{"codex", "opencode"} {
-		fs.Bool(f, false, "not implemented until a later milestone")
-	}
+	fs.BoolVar(&opts.Codex, "codex", false, "install the Codex hook adapter")
+	fs.Bool("opencode", false, "not implemented until a later milestone")
 	ci := fs.String("ci", "", "not implemented until a later milestone")
 	if err := fs.Parse(args); err != nil {
 		return out.fail(exitUsage, "init: "+err.Error())
@@ -25,9 +24,9 @@ func runInit(out *output, args []string) int {
 		return out.fail(exitUsage, "init: unexpected arguments")
 	}
 	unsupported := *ci != ""
-	fs.Visit(func(f *flag.Flag) { unsupported = unsupported || f.Name == "codex" || f.Name == "opencode" })
+	fs.Visit(func(f *flag.Flag) { unsupported = unsupported || f.Name == "opencode" })
 	if unsupported {
-		return out.fail(exitUsage, "init: --codex, --opencode and --ci are not implemented yet")
+		return out.fail(exitUsage, "init: --opencode and --ci are not implemented yet")
 	}
 	root, err := repoRoot()
 	if err != nil {
