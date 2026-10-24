@@ -2,9 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -160,6 +163,47 @@ func TestTriageUsageAndMissingBead(t *testing.T) {
 	}
 	code, out, _ := runArc("triage", "t-404")
 	if code != exitUsage || !strings.Contains(out, "t-404: error:") {
+		t.Fatalf("code %d out %q", code, out)
+	}
+}
+
+func TestParseInterspersedDoubleDash(t *testing.T) {
+	for _, tc := range []struct {
+		args, pos []string
+		dry       bool
+		name      string
+	}{
+		{[]string{"a", "--dry-run", "b"}, []string{"a", "b"}, true, ""},
+		{[]string{"--", "--dry-run", "a"}, []string{"--dry-run", "a"}, false, ""},
+		{[]string{"a", "--dry-run", "--", "-b", "--", "c"}, []string{"a", "-b", "--", "c"}, true, ""},
+		{[]string{"a", "--"}, []string{"a"}, false, ""},
+		// "--" as the value of a string flag is not a terminator.
+		{[]string{"-name", "--", "a", "--dry-run"}, []string{"a"}, true, "--"},
+		{[]string{"-name=x", "--", "--dry-run"}, []string{"--dry-run"}, false, "x"},
+	} {
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		dry := fs.Bool("dry-run", false, "")
+		name := fs.String("name", "", "")
+		pos, err := parseInterspersed(fs, tc.args)
+		if err != nil || !reflect.DeepEqual(pos, tc.pos) || *dry != tc.dry || *name != tc.name {
+			t.Errorf("%q: pos %q dry %v name %q err %v", tc.args, pos, *dry, *name, err)
+		}
+	}
+}
+
+func TestTriageDoubleDash(t *testing.T) {
+	state := beadsRepo(t)
+	fakeShow(t, state, "t-1", okDesc)
+	code, out, errOut := runArc("triage", "--dry-run", "--", "t-1")
+	if code != exitOK || !strings.Contains(out, "t-1: arch:ok") {
+		t.Fatalf("code %d out %q stderr %q", code, out, errOut)
+	}
+	// After "--" a dash-led argument is a bead id, not a flag (and an
+	// invalid one, so it is reported per bead rather than as a bad flag).
+	code, out, _ = runArc("triage", "--", "t-1", "--new")
+	if code != exitUsage || !strings.Contains(out, "t-1: arch:ok") ||
+		!strings.Contains(out, `--new: error: invalid bead id "--new"`) {
 		t.Fatalf("code %d out %q", code, out)
 	}
 }

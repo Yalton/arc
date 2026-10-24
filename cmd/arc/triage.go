@@ -69,12 +69,16 @@ func runTriage(out *output, args []string) int {
 }
 
 // parseInterspersed parses flags that may appear before, between or after
-// positional arguments, and returns the positional ones.
+// positional arguments, and returns the positional ones. A "--" ends flag
+// parsing: everything after it is positional.
 func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 	var pos []string
 	for {
 		if err := fs.Parse(args); err != nil {
 			return nil, err
+		}
+		if endedFlags(fs, args[:len(args)-fs.NArg()]) {
+			return append(pos, fs.Args()...), nil
 		}
 		if fs.NArg() == 0 {
 			return pos, nil
@@ -82,6 +86,29 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 		args = fs.Args()
 		pos, args = append(pos, args[0]), args[1:]
 	}
+}
+
+// endedFlags reports whether fs.Parse stopped at a "--" terminator, given
+// the arguments it consumed: the last one is "--" and is not the value of
+// a preceding non-boolean flag.
+func endedFlags(fs *flag.FlagSet, consumed []string) bool {
+	n := len(consumed)
+	if n == 0 || consumed[n-1] != "--" {
+		return false
+	}
+	if n == 1 {
+		return true
+	}
+	prev := strings.TrimLeft(consumed[n-2], "-")
+	if prev == consumed[n-2] || strings.Contains(prev, "=") {
+		return true // not a flag, or a flag carrying its own value
+	}
+	f := fs.Lookup(prev)
+	if f == nil {
+		return true
+	}
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
 }
 
 func indent(s string) string {
