@@ -160,6 +160,17 @@ unconditional `exec` or `exit`, the block could never run; arc then moves
 the hook to `pre-commit.local` and installs a hook that runs it first.
 Harness flags install the matching adapter. Idempotent.
 
+`--ci github|gitea` writes `.github/workflows/arc.yml` or
+`.gitea/workflows/arc.yml` (Forgejo reads `.gitea/` too): `arc gate --base
+origin/<target>` on pull requests and `arc gate --all` on pushes to the
+default branch (`origin/HEAD`, else `main`), checking out with full history.
+arc's module path is not fetchable, so the workflow builds arc from source:
+it clones the git URL in the `ARC_REPO` repository variable at `ARC_REF`
+(branch or tag, default `main`) and fails with a clear error while
+`ARC_REPO` is unset; init prints a notice saying so. The file's first line
+is an arc marker comment: rerun refreshes a marked file and refuses to touch
+an unmarked one.
+
 `--scan` proposes one `draft: true` concept per top-level package directory,
 with `paths` filled in. Drafts are meant to be refined by a human or an
 architect agent; `gate` warns while drafts exist.
