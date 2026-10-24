@@ -68,7 +68,7 @@ func TestRenderPreservesOutsideText(t *testing.T) {
 		!strings.HasSuffix(got, EndMarker+"\n\nAnd me.\n") || strings.Contains(got, "OLD-CONTENT") {
 		t.Fatalf("outside text not preserved:\n%s", got)
 	}
-	if n := strings.Count(Snippet(), "\n"); n >= 15 {
+	if n := strings.Count(Snippet(true), "\n"); n >= 15 {
 		t.Fatalf("snippet has %d lines, want < 15", n)
 	}
 }
@@ -84,6 +84,36 @@ func TestStaleAfterRegistryChange(t *testing.T) {
 	s, err := r.Stale(root)
 	if err != nil || strings.Join(s, ",") != "ARCHITECTURE.md" {
 		t.Fatalf("stale = %v, err %v", s, err)
+	}
+}
+
+func TestRenderBeadsLine(t *testing.T) {
+	root := t.TempDir()
+	r := loadFixture(t, "valid.yaml")
+	if _, err := r.Render(root); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	if strings.Contains(string(data), "Concepts touched") {
+		t.Fatalf("bead line without .beads:\n%s", data)
+	}
+	// A .beads file is not a workspace; only the directory counts.
+	os.WriteFile(filepath.Join(root, ".beads"), nil, 0o644)
+	if stale, _ := r.IsStale(root); stale {
+		t.Fatal(".beads file must not change the snippet")
+	}
+	os.Remove(filepath.Join(root, ".beads"))
+	os.Mkdir(filepath.Join(root, ".beads"), 0o755)
+	if s, _ := r.Stale(root); strings.Join(s, ",") != "AGENTS.md" {
+		t.Fatalf("stale = %v, want AGENTS.md once the repo uses beads", s)
+	}
+	if _, err := r.Render(root); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	golden(t, "AGENTS-beads.md", string(data))
+	if stale, _ := r.IsStale(root); stale {
+		t.Fatal("stale right after render")
 	}
 }
 

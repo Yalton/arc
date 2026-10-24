@@ -90,6 +90,9 @@ func TestAnalyzeUnknownConcept(t *testing.T) {
 		!reflect.DeepEqual(r.Concepts, []string{"goal"}) {
 		t.Fatalf("got %+v", r)
 	}
+	if !strings.Contains(r.Note, "list registry concept ids separated by commas") {
+		t.Fatalf("note %q", r.Note)
+	}
 }
 
 func TestAnalyzeNoConcept(t *testing.T) {

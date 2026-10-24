@@ -224,7 +224,11 @@ to check that the check is configured right.
 ### `arc render`
 
 Rewrites the rendered block in `ARCHITECTURE.md` and the snippet in
-`AGENTS.md`/`CLAUDE.md`.
+`AGENTS.md`/`CLAUDE.md`. When the repository uses beads (a `.beads/`
+directory at the root), the snippet gains a line telling agents to give new
+beads the `triage` template fields, with `Concepts touched` listing registry
+concept ids separated by commas. Output depends only on the tree, so `gate`
+staleness checks agree with `render`.
 
 ### `arc hook <claude|codex|opencode> [<event>]`
 
@@ -260,7 +264,8 @@ For each bead (`--new`: open beads without an `arch:*` label):
 3. Non-goal keywords matched.
 4. Labels: `arch:ok` if fields are present, at least one concept resolved and
    no non-goal matched; otherwise `arch:review` with a note giving the
-   reasons. Beads that name a concept not in the registry get `arch:review`.
+   reasons. Beads that name a concept not in the registry get `arch:review`,
+   with a reason saying to list registry concept ids separated by commas.
    Applying one of `arch:ok` and `arch:review` removes the other if present
    (a bead fixed after review ends up with only `arch:ok`); triage touches no
    other labels.

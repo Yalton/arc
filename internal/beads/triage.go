@@ -85,7 +85,7 @@ func Analyze(reg *registry.Registry, b Bead, now time.Time) Result {
 	r.Concepts, r.UnknownConcepts = beadConcepts(reg, text)
 	for _, e := range r.UnknownConcepts {
 		r.Reasons = append(r.Reasons, fmt.Sprintf(
-			"'Concepts touched' names %q, which is not in the registry; use an existing concept or add it to %s with a reason",
+			"'Concepts touched' names %q, which is not in the registry; list registry concept ids separated by commas, or add the concept to %s with a reason",
 			e, registry.Path))
 	}
 	if len(r.Concepts) == 0 {
