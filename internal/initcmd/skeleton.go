@@ -33,6 +33,7 @@ var defaultIgnore = []string{
 	".arch/**",
 	".beads/**",
 	".claude/**",
+	".opencode/**",
 	".github/**",
 	".gitea/**",
 	".forgejo/**",

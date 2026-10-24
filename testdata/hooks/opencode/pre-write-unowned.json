@@ -1,0 +1,1 @@
+{"hook":"execute.before","tool":"write","session_id":"ses_e90a064d2ffeNOw86foVlLxBoS","call_id":"jnWiVLDc6eyz42i55PgvfF1ca3Tx5pf7","directory":"{{ROOT}}","input":{"path":"internal/foo/x.go","content":"package foo\n"}}

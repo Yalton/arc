@@ -16,9 +16,10 @@ import (
 
 // Options selects optional init behaviour.
 type Options struct {
-	Scan   bool // propose draft concepts from the directory layout
-	Claude bool // add arc's hooks to .claude/settings.json
-	Codex  bool // add arc's hooks to .codex/hooks.json
+	Scan     bool // propose draft concepts from the directory layout
+	Claude   bool // add arc's hooks to .claude/settings.json
+	Codex    bool // add arc's hooks to .codex/hooks.json
+	Opencode bool // install arc's plugin shim in .opencode/plugins/
 }
 
 // Result lists what Run did. Paths are repo-relative and slash-separated
@@ -61,6 +62,11 @@ func Run(root string, opts Options) (*Result, error) {
 	}
 	if opts.Codex {
 		if err := ensureCodex(root, res); err != nil {
+			return res, err
+		}
+	}
+	if opts.Opencode {
+		if err := ensureOpencode(root, res); err != nil {
 			return res, err
 		}
 	}
