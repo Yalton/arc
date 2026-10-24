@@ -37,13 +37,17 @@ func runGate(out *output, args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return out.fail(exitUsage, "gate: "+err.Error())
 	}
+	if fs.NArg() > 0 {
+		return out.fail(exitUsage, "gate: unexpected arguments: "+strings.Join(fs.Args(), " ")+
+			"; gate judges the change set (use arc place/brief for paths)")
+	}
 	modes := 0
 	for _, on := range []bool{*base != "", *staged, *all} {
 		if on {
 			modes++
 		}
 	}
-	if modes > 1 || fs.NArg() > 0 {
+	if modes > 1 {
 		return out.fail(exitUsage, "gate: use at most one of --base <ref>, --staged, --all")
 	}
 

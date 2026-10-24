@@ -203,7 +203,8 @@ With no arguments, prints the whole registry in compact form (the
 Runs deterministic checks against the change set (diff vs base, or staged).
 With no mode flag it judges uncommitted work against `HEAD`: staged and
 unstaged changes plus untracked, non-ignored files. The pre-commit hook uses
-`--staged`; CI uses `--base`.
+`--staged`; CI uses `--base`. Gate takes no path arguments (exit 2 names
+them and points to `place`/`brief`); giving two mode flags is also exit 2.
 
 | Check | Fails when |
 |---|---|
