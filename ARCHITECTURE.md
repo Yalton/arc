@@ -28,4 +28,5 @@ the section.
 | brief (Brief and place) | `internal/brief/**` |  |  | Owning-concept lookup with closest-concept suggestions, and compact agent-facing briefs. *Why:* Agents need small, targeted context at the moment they edit; place and brief share ownership lookup. |
 | initcmd (Init) | `internal/initcmd/**` |  |  | arc init — registry skeleton, --scan drafts, render, pre-commit hook and harness setup. *Why:* Adoption must be one idempotent command that never destroys existing files or hooks. |
 | hook (Harness hooks) | `internal/hook/**`, `adapters/**` |  |  | Harness-agnostic hook decisions plus per-harness payload adapters. *Why:* Harness integrations stay thin adapters over shared decisions (SPEC principle 2). |
+| beads (Beads integration) | `internal/beads/**` |  |  | bd CLI wrapper and bead triage against the registry; optional, skipped when bd or a workspace is missing. *Why:* Beads is reached only through the bd CLI (SPEC principle 4); one wrapper keeps that rule and the triage logic in one place. |
 <!-- arc:end -->

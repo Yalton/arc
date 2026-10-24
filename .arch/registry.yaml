@@ -107,6 +107,16 @@ concepts:
       - Any internal error allows the action with a warning; a broken arc never blocks an agent.
       - Payload formats are pinned by fixtures under testdata/hooks.
 
+  - id: beads
+    name: Beads integration
+    summary: bd CLI wrapper and bead triage against the registry; optional, skipped when bd or a workspace is missing.
+    paths: ["internal/beads/**"]
+    aliases: [bead, bd, triage, label, note]
+    reason: Beads is reached only through the bd CLI (SPEC principle 4); one wrapper keeps that rule and the triage logic in one place.
+    rules:
+      - Run bd as a subprocess with a timeout; never open the beads database.
+      - Missing bd or workspace is a notice, never an error; arc never closes, reprioritizes or deletes beads, and only adds labels.
+
 limits:
   file_lines: 1000
   function_lines: 150

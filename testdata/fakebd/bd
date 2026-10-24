@@ -1,0 +1,41 @@
+#!/bin/sh
+# Fake bd for arc tests, mimicking bd 1.3.0 output. State is in $FAKEBD_DIR:
+#   nows             if present, 'bd where' fails (no workspace)
+#   show-<id>.json   output of 'bd show <id> --json' (a JSON array)
+#   list.json        output of 'bd list ... --json' (default [])
+#   create.json      output of 'bd create ... --json'
+#   calls            appended: one line of arguments per invocation
+#   stdin            appended: '== <cmd> <id>' then stdin, for note/create
+d=${FAKEBD_DIR:?FAKEBD_DIR not set}
+printf '%s\n' "$*" >> "$d/calls"
+case "$1" in
+where)
+	if [ -e "$d/nows" ]; then
+		echo "Error: No active beads workspace found." >&2
+		exit 1
+	fi
+	echo "$d/.beads" ;;
+show)
+	f="$d/show-$2.json"
+	if [ ! -f "$f" ]; then
+		echo "Issue $2 not found" >&2
+		echo '{"error": "no issues found matching the provided IDs"}'
+		exit 1
+	fi
+	cat "$f" ;;
+list)
+	if [ -f "$d/list.json" ]; then cat "$d/list.json"; else echo '[]'; fi ;;
+note)
+	printf '== note %s\n' "$2" >> "$d/stdin"
+	cat >> "$d/stdin"
+	echo "✓ Note added to $2" ;;
+label)
+	echo "✓ Added label '$4' to $3" ;;
+create)
+	printf '== create\n' >> "$d/stdin"
+	cat >> "$d/stdin"
+	cat "$d/create.json" ;;
+*)
+	echo "fake bd: unsupported: $*" >&2
+	exit 1 ;;
+esac
