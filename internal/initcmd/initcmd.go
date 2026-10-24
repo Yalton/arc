@@ -19,6 +19,8 @@ type Options struct {
 	Scan   bool // propose draft concepts from the directory layout
 	Claude bool // add arc's hooks to .claude/settings.json
 	Codex  bool // add arc's hooks to .codex/hooks.json
+
+	CI string // "github" or "gitea": write a CI workflow running arc gate (ci.go)
 }
 
 // Result lists what Run did. Paths are repo-relative and slash-separated
@@ -41,6 +43,9 @@ const gitignorePath = ".arch/.gitignore"
 // Run initializes arc in the repository at root.
 func Run(root string, opts Options) (*Result, error) {
 	res := &Result{Created: []string{}, Updated: []string{}, Notices: []string{}}
+	if err := checkCI(opts.CI); err != nil {
+		return res, err
+	}
 	reg, err := ensureRegistry(root, opts, res)
 	if err != nil {
 		return res, err
@@ -61,6 +66,11 @@ func Run(root string, opts Options) (*Result, error) {
 	}
 	if opts.Codex {
 		if err := ensureCodex(root, res); err != nil {
+			return res, err
+		}
+	}
+	if opts.CI != "" {
+		if err := ensureCI(root, opts.CI, res); err != nil {
 			return res, err
 		}
 	}
