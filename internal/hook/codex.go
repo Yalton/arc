@@ -50,6 +50,17 @@ type codexPayload struct {
 	ToolInput     struct {
 		Command string `json:"command"` // Bash command line or apply_patch text
 	} `json:"tool_input"`
+	ToolResponse json.RawMessage `json:"tool_response"` // PostToolUse: a string
+}
+
+// codexOutput returns a PostToolUse tool_response as text: the string
+// itself, or the raw JSON if a future Codex sends something else.
+func codexOutput(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	return string(raw)
 }
 
 // patchHeaders are the apply_patch lines that name a target path.
@@ -91,6 +102,7 @@ func CodexEvent(payload []byte) (Event, string, error) {
 	case "PostToolUse":
 		if p.ToolName == "Bash" {
 			ev.Kind, ev.Command = PostShell, p.ToolInput.Command
+			ev.Output = codexOutput(p.ToolResponse)
 		}
 	}
 	return ev, p.HookEventName, nil

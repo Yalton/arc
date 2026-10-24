@@ -36,7 +36,16 @@ func runBaseline(out *output, args []string) int {
 	if err != nil {
 		return out.fail(exitUsage, "baseline: "+err.Error())
 	}
-	out.result(fmt.Sprintf("%s: %d finding(s) accepted in %s (%d added, %d removed)",
-		res.Check, res.Findings, res.Path, res.Added, res.Removed), res)
+	text := fmt.Sprintf("%s: %d finding(s) accepted in %s (%d added, %d removed)",
+		res.Check, res.Findings, res.Path, res.Added, res.Removed)
+	if len(res.AddedSample) > 0 {
+		// A misconfigured check is accepted too; show what was added.
+		text += "\nnewly accepted"
+		if res.Added > len(res.AddedSample) {
+			text += fmt.Sprintf(" (first %d of %d)", len(res.AddedSample), res.Added)
+		}
+		text += ":\n  " + strings.Join(res.AddedSample, "\n  ")
+	}
+	out.result(text, res)
 	return exitOK
 }

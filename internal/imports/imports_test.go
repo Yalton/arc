@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fixture copies testdata/imports/<name> into a temp dir and returns it.
@@ -97,6 +98,29 @@ func TestGoImportsNestedModule(t *testing.T) {
 	check(t, got, "svc/cmd/main.go", "3 example.com/svc/internal/store -> svc/internal/store")
 }
 
+func TestGoListTimeoutFallsBack(t *testing.T) {
+	defer func(d time.Duration) { goListTimeout = d }(goListTimeout)
+	goListTimeout = time.Nanosecond
+	root := t.TempDir()
+	write := func(p, s string) {
+		p = filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module example.com/m\n\ngo 1.22\n")
+	write("cmd/main.go", "package main\n\nimport _ \"example.com/m/store\"\n\nfunc main() {}\n")
+	write("store/store.go", "package store\n")
+	got, err := Imports(root, []string{"cmd/main.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, got, "cmd/main.go", "3 example.com/m/store -> store")
+}
+
 func TestPythonImports(t *testing.T) {
 	root := fixture(t, "python")
 	got, err := Imports(root, []string{"pkg/api/handlers.py"})
@@ -112,7 +136,52 @@ func TestPythonImports(t *testing.T) {
 		"9 ..util -> pkg/util.py",
 		"10 pkg.store -> pkg/store.py",
 		"14 lib.core -> src/lib/core.py",
-		"15 .missing -> pkg/api/missing")
+		"16 .missing -> pkg/api/missing")
+}
+
+func TestPythonImportsTokenLines(t *testing.T) {
+	root := fixture(t, "python")
+	src := "from pkg import (\n" +
+		"    store,\n" +
+		"    util as u,\n" +
+		"    NAME,\n" +
+		")\n" +
+		"from pkg.api import \\\n" +
+		"    views\n"
+	got, err := ImportsWith(root, []string{"pkg/new.py"}, func(string) ([]byte, bool, error) {
+		return []byte(src), true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, got, "pkg/new.py",
+		"2 pkg.store -> pkg/store.py",
+		"3 pkg.util -> pkg/util.py",
+		"1 pkg -> pkg",
+		"7 pkg.api.views -> pkg/api/views.py")
+}
+
+func TestPythonImportsStringEscapes(t *testing.T) {
+	root := fixture(t, "python")
+	src := "x = 'it\\'s (' ; import os\n" + // escaped quote must not end the string
+		"y = \"a\\\"(\"\n" + // escaped quote with a bracket after it
+		"import pkg.store\n" +
+		"z = \"\"\"doc \\\"\"\" still\n" +
+		"import fake_in_docstring\n" +
+		"\"\"\"\n" +
+		"s = 'abc\\\n" + // single-quoted string continued by backslash
+		"import fake_continued'\n" +
+		"import pkg.util\n"
+	got, err := ImportsWith(root, []string{"pkg/new.py"}, func(string) ([]byte, bool, error) {
+		return []byte(src), true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(t, got, "pkg/new.py",
+		"1 os -> ",
+		"3 pkg.store -> pkg/store.py",
+		"9 pkg.util -> pkg/util.py")
 }
 
 func TestJSImports(t *testing.T) {

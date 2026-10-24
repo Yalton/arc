@@ -75,6 +75,36 @@ func TestExternalBaselineFiltersAcceptedAcrossLineShifts(t *testing.T) {
 	}
 }
 
+func TestExternalBaselineIsMultiset(t *testing.T) {
+	r := externalRepo(t, fakeTool(t), true)
+	r.write("out", "a/x.go:3:1: unused func Old\nb.go:1: dup\nb.go:5: dup\n")
+	k := r.registryCheck()
+	res, err := RecordBaseline(r.root, k)
+	if err != nil || res.Findings != 3 || res.Added != 3 ||
+		strings.Join(res.AddedSample, "|") != "a/x.go: unused func Old|b.go: dup|b.go: dup" {
+		t.Fatalf("record: %+v %v", res, err)
+	}
+	data, _ := os.ReadFile(filepath.Join(r.root, ".arch/baseline/lint.txt"))
+	if string(data) != "a/x.go: unused func Old\nb.go: dup\nb.go: dup\n" {
+		t.Fatalf("baseline file %q", data)
+	}
+	if rep := r.gate("all", "checks.lint"); rep.Errors != 0 {
+		t.Fatalf("got:\n%s", findings(rep))
+	}
+	// A new finding identical (after normalization) to accepted ones fails:
+	// only the excess copies are reported.
+	r.write("out", "a/x.go:3:1: unused func Old\na/x.go:8:1: unused func Old\nb.go:1: dup\nb.go:5: dup\nb.go:9: dup\n")
+	rep := r.gate("all", "checks.lint")
+	if rep.Errors != 2 || !strings.Contains(findings(rep), "a/x.go:8:1: unused func Old") ||
+		!strings.Contains(findings(rep), "b.go:9: dup") {
+		t.Fatalf("got:\n%s", findings(rep))
+	}
+	// Re-recording counts copies.
+	if res, err = RecordBaseline(r.root, k); err != nil || res.Findings != 5 || res.Added != 2 || res.Removed != 0 {
+		t.Fatalf("re-record: %+v %v", res, err)
+	}
+}
+
 func TestExternalWithoutBaselineFailsEveryFinding(t *testing.T) {
 	r := externalRepo(t, fakeTool(t), false)
 	r.write(".arch/baseline/lint.txt", "a/x.go: old\n")

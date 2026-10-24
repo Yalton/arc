@@ -21,7 +21,8 @@ const (
 var TemplateFields = []string{"Replaces / removes", "Concepts touched", "Closest existing thing"}
 
 // Notes written by triage are wrapped in these lines so later runs can
-// leave them out of the analysed text and skip identical notes.
+// leave them out of the analysed text and skip notes with the same
+// decision.
 const (
 	noteBegin = "--- arc triage ---"
 	noteEnd   = "--- end arc triage ---"
@@ -143,22 +144,43 @@ func note(reg *registry.Registry, r Result, now time.Time) string {
 	}
 	if len(r.Concepts) > 0 {
 		if b, err := brief.ForConcepts(reg, r.Concepts, now); err == nil {
-			w.WriteString("arc brief:\n" + b.Text())
+			w.WriteString(noteBrief + b.Text())
 		}
 	}
 	w.WriteString(noteEnd)
 	return w.String()
 }
 
-// Triage analyses b and, unless dryRun, appends the note (skipped when an
-// identical one is already there) and adds the label (skipped when
-// present). It never removes labels.
+// noteBrief starts the brief part of a triage note, which depends on the
+// date; the part before it (label and reasons) is the decision.
+const noteBrief = "arc brief:\n"
+
+// noteDecision returns the label and reasons part of a triage note.
+func noteDecision(n string) string {
+	n = strings.TrimSuffix(n, noteEnd)
+	if i := strings.Index(n, noteBrief); i >= 0 {
+		n = n[:i]
+	}
+	return n
+}
+
+// sameDecision reports whether the most recent triage note in notes has
+// the same label and reasons as note.
+func sameDecision(notes, note string) bool {
+	all := arcNote.FindAllString(notes, -1)
+	return len(all) > 0 && noteDecision(all[len(all)-1]) == noteDecision(note)
+}
+
+// Triage analyses b and, unless dryRun, appends the note (skipped when the
+// most recent triage note has the same label and reasons, since the brief
+// in it changes with the date) and adds the label (skipped when present).
+// It never removes labels.
 func Triage(c *Client, reg *registry.Registry, b Bead, now time.Time, dryRun bool) (Result, error) {
 	r := Analyze(reg, b, now)
 	if dryRun {
 		return r, nil
 	}
-	if !strings.Contains(b.Notes, r.Note) {
+	if !sameDecision(b.Notes, r.Note) {
 		if err := c.Note(b.ID, r.Note); err != nil {
 			return r, err
 		}

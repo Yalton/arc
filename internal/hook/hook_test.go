@@ -112,15 +112,41 @@ func TestDecideBrokenRegistryWarnsAndAllows(t *testing.T) {
 	}
 }
 
-func TestBdCreateMatch(t *testing.T) {
+func TestIsBdCreate(t *testing.T) {
 	for cmd, want := range map[string]bool{
-		`bd create "x" -p 1`:          true,
-		`cd a && bd create --title=x`: true,
-		`echo bd created`:             false,
-		`abd create`:                  false,
+		`bd create "x" -p 1`:                        true,
+		`cd a && bd create --title=x`:               true,
+		"make\nbd create x":                         true,
+		`true;bd create x`:                          true,
+		`echo x | bd create --stdin`:                true,
+		`BD_ACTOR=me bd create x`:                   true,
+		`(bd create x)`:                             true,
+		`echo bd created`:                           false,
+		`abd create`:                                false,
+		`echo bd create`:                            false,
+		`git commit -m "bd create x"`:               false,
+		`git commit -m 'fix; bd create x'`:          false,
+		`git commit -m "a && bd create \"x\""`:      false,
+		`bd list && git commit -m "then bd create"`: false,
+		`bd show x`:                                 false,
 	} {
-		if got := bdCreate.MatchString(cmd); got != want {
+		if got := isBdCreate(cmd); got != want {
 			t.Errorf("%q: got %v", cmd, got)
+		}
+	}
+}
+
+func TestCreatedIDs(t *testing.T) {
+	for out, want := range map[string]string{
+		"✓ Created issue: arc-1 — Add goal export\n": "arc-1",
+		"arc-2\n": "arc-2",
+		"{\n  \"id\": \"arc-3\",\n  \"title\": \"x\",\n  \"dependencies\": [{\"issue_id\": \"arc-9\"}]\n}\n": "arc-3",
+		`[{"id": "arc-4"}, {"id": "arc-5"}]`: "arc-4 arc-5",
+		"Error: title required\n":            "",
+		"":                                   "",
+	} {
+		if got := strings.Join(createdIDs(out), " "); got != want {
+			t.Errorf("%q: got %q want %q", out, got, want)
 		}
 	}
 }
@@ -154,19 +180,28 @@ func post(root, command, output string) Event {
 	return Event{Kind: PostShell, SessionID: "s1", Cwd: root, Command: command, Output: output}
 }
 
-func TestPostShellFallsBackToRecentNewBeads(t *testing.T) {
+func TestPostShellTriagesOnlyReportedBeads(t *testing.T) {
 	root := newRepo(t)
 	state := fakeBd(t)
 	recent := now.Add(-30 * time.Second).Format(time.RFC3339)
-	old := now.Add(-time.Hour).Format(time.RFC3339)
-	write(t, state, "list.json", `[
-	  {"id": "a-new", "status": "open", "created_at": "`+recent+`", "description": "Concepts touched: goal"},
-	  {"id": "a-old", "status": "open", "created_at": "`+old+`"},
-	  {"id": "a-done", "status": "open", "created_at": "`+recent+`", "labels": ["arch:ok"]}
-	]`)
+	// Another agent's fresh untriaged bead must never be triaged.
+	write(t, state, "list.json", `[{"id": "a-other", "status": "open", "created_at": "`+recent+`"}]`)
+	fakeShowBead(t, state, "a-new", "Concepts touched: goal")
 	d := Decide(post(root, "bd create --silent x", "a-new\n"), now)
-	if d.Deny || !strings.Contains(d.Context, "a-new: arch:review") ||
-		strings.Contains(d.Context, "a-old") || strings.Contains(d.Context, "a-done") {
+	if d.Deny || !strings.Contains(d.Context, "a-new: arch:review") || strings.Contains(d.Context, "a-other") {
+		t.Fatalf("got %+v", d)
+	}
+	// No id in the output: nothing is triaged and bd is not listed.
+	if d := Decide(post(root, "bd create x", "Error: title required\n"), now); d != (Decision{}) {
+		t.Fatalf("got %+v", d)
+	}
+	if calls := readFake(t, state, "calls"); strings.Contains(calls, "list") {
+		t.Fatalf("bd list must not be called:\n%s", calls)
+	}
+	// 'bd create' inside a commit message is not a bd create.
+	before := readFake(t, state, "calls")
+	if d := Decide(post(root, `git commit -m "bd create x"`, "✓ Created issue: a-new — x"), now); d != (Decision{}) ||
+		readFake(t, state, "calls") != before {
 		t.Fatalf("got %+v", d)
 	}
 }
@@ -185,12 +220,12 @@ func TestPostShellNeverBlocks(t *testing.T) {
 	}
 	// No beads workspace: notice as a warning.
 	write(t, state, "nows", "")
-	if d := Decide(post(root, "bd create x", ""), now); d.Deny || d.Context != "" || !strings.Contains(d.Warning, "bead features skipped") {
+	if d := Decide(post(root, "bd create x", "✓ Created issue: a-1 — x"), now); d.Deny || d.Context != "" || !strings.Contains(d.Warning, "bead features skipped") {
 		t.Fatalf("got %+v", d)
 	}
 	// No registry: silent.
 	os.Remove(filepath.Join(root, ".arch/registry.yaml"))
-	if d := Decide(post(root, "bd create x", ""), now); d != (Decision{}) {
+	if d := Decide(post(root, "bd create x", "✓ Created issue: a-1 — x"), now); d != (Decision{}) {
 		t.Fatalf("got %+v", d)
 	}
 }

@@ -147,6 +147,30 @@ func TestTriageWritesOnce(t *testing.T) {
 	}
 }
 
+func TestTriageSkipsNoteWithSameDecision(t *testing.T) {
+	c, state := fakeBd(t)
+	reg := testRegistry(t)
+	b := Bead{ID: "t-1", Description: goodDesc, Labels: []string{LabelOK}}
+	r := Analyze(reg, b, now)
+	// The brief in an earlier note differs (written on another day): the
+	// decision is the same, so no duplicate note.
+	old := strings.Replace(r.Note, noteBrief, noteBrief+"brief from yesterday\n", 1)
+	b.Notes = old
+	if r, err := Triage(c, reg, b, now.Add(48*time.Hour), false); err != nil || r.NoteAdded {
+		t.Fatalf("got %+v %v", r, err)
+	}
+	if calls := readState(t, state, "calls"); calls != "" {
+		t.Fatalf("calls %q", calls)
+	}
+	// Only the most recent note counts: a later arch:review note means the
+	// decision changed back, so a new note is written.
+	review := Analyze(reg, Bead{ID: "t-1", Description: "no template"}, now).Note
+	b.Notes = old + "\n" + review
+	if r, err := Triage(c, reg, b, now, false); err != nil || !r.NoteAdded {
+		t.Fatalf("got %+v %v", r, err)
+	}
+}
+
 func TestTriageNeverRemovesLabels(t *testing.T) {
 	c, state := fakeBd(t)
 	b := Bead{ID: "t-1", Description: "no template", Labels: []string{LabelOK}}

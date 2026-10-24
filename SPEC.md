@@ -126,7 +126,7 @@ limits:
 checks:                         # external tools, run by gate
   - id: deadcode
     command: ["deadcode", "./..."]
-    baseline: true              # only findings absent from baseline fail
+    baseline: true              # only findings beyond the baseline fail
   - id: staticcheck
     command: ["staticcheck", "./..."]
     baseline: true
@@ -200,7 +200,7 @@ unstaged changes plus untracked, non-ignored files. The pre-commit hook uses
 | `flags` | a flag is past `expires` |
 | `removals` | a removal is past `remove_by`; or its paths no longer exist but the entry remains (delete the entry) |
 | `size` | a changed file exceeds `file_lines`, or a changed Go function exceeds `function_lines` |
-| `checks.*` | an external command reports a finding not in its baseline |
+| `checks.*` | an external command reports a finding not in its baseline (compared as a multiset: a finding fails when its normalized form occurs more times than in the baseline) |
 | `reasons` | the change adds a non-draft concept (or turns a draft into one) without a `reason`; skipped when the comparison point has no registry (adoption); with `--all`, every non-draft concept needs one |
 | `drafts` | warning only: draft concepts exist |
 
@@ -214,7 +214,12 @@ Extend one, or add a concept to .arch/registry.yaml with a reason.`
 
 ### `arc baseline <check-id>`
 
-Records the current findings of an external check as accepted.
+Records the current findings of an external check as accepted. The baseline
+file holds one normalized line per finding (line and column numbers
+stripped), sorted, duplicates kept. Any output is accepted, since linters
+exit non-zero with findings, so the command reports added/removed counts and
+prints up to 5 newly accepted lines (`added_sample` in `--json`) for a human
+to check that the check is configured right.
 
 ### `arc render`
 
@@ -230,7 +235,12 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
   context, once per concept per session (session id from the payload; state
   in `.arch/cache/`).
 - **After a shell command that ran `bd create`:** run `triage` on the new
-  bead and return its result as added context.
+  bead and return its result as added context. `bd create` must be a
+  command (start of the line or after an unquoted `;`, `&`, `|`, newline or
+  parenthesis), not text inside quotes or arguments. Only the bead ids the
+  command's output names are triaged (`✓ Created issue: <id> — <title>`,
+  `--json` objects with `"id"`, or the bare `--silent` id); with no id in
+  the output nothing is triaged.
 - Any internal error allows the action and prints a warning; a broken arc
   install must never block an agent.
 
@@ -252,8 +262,9 @@ For each bead (`--new`: open beads without an `arch:*` label):
    no non-goal matched; otherwise `arch:review` with a note giving the
    reasons. Beads that name a concept not in the registry get `arch:review`.
 
-`--dry-run` prints without writing. arc never closes, reprioritizes or
-deletes beads.
+`--dry-run` prints without writing. Re-triage skips the note when the bead's
+most recent arc triage note has the same label and reasons (the brief in it
+changes with the date). arc never closes, reprioritizes or deletes beads.
 
 ### `arc audit [--since 7d] [--prompt] [--file-beads]`
 

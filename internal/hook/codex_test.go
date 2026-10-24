@@ -63,12 +63,23 @@ func TestCodexShellEvents(t *testing.T) {
 	if _, raw, _ := codexRun(t, root, "pre-bash.json"); raw != "" {
 		t.Fatalf("pre-shell must be silent, got %q", raw)
 	}
-	if _, raw, _ := codexRun(t, root, "post-bash-bd-create.json"); raw != "" {
-		t.Fatalf("bd create has no triage yet, got %q", raw)
-	}
 	ev, event, _ := CodexEvent([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"bd create x"}}`))
 	if event != "PostToolUse" || ev.Kind != PostShell || ev.Command != "bd create x" {
 		t.Fatalf("event %+v", ev)
+	}
+}
+
+func TestCodexBdCreateTriaged(t *testing.T) {
+	root := newRepo(t)
+	state := fakeBd(t)
+	fakeShowBead(t, state, "arc-1", "Concepts touched: goal")
+	resp, _, stderr := codexRun(t, root, "post-bash-bd-create.json")
+	h := resp.HookSpecificOutput
+	if h == nil || h.HookEventName != "PostToolUse" || !strings.Contains(h.AdditionalContext, "arc-1: arch:review") {
+		t.Fatalf("got %+v stderr %q", h, stderr)
+	}
+	if calls := readFake(t, state, "calls"); !strings.Contains(calls, "show arc-1") {
+		t.Fatalf("bd calls:\n%s", calls)
 	}
 }
 

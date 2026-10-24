@@ -56,15 +56,16 @@ func ExternalCheck(reg *registry.Registry, id string) *registry.Check {
 
 // checkExternal runs k on the whole tree, whatever the gate mode: external
 // tools judge the repository, and baselines provide incremental adoption
-// (SPEC.md principle 6). With baseline, only findings whose normalized form
-// is not in the baseline file fail.
+// (SPEC.md principle 6). With baseline, the baseline file is a multiset:
+// a finding fails when its normalized form occurs more times than in the
+// baseline file, so a new copy of an accepted finding still fails.
 func checkExternal(ctx *Context, k registry.Check) ([]Finding, error) {
 	entry := "checks[" + k.ID + "]"
 	lines, err := RunExternal(ctx.Root, k)
 	if err != nil {
 		return []Finding{{Path: registry.Path, Entry: entry, Message: err.Error()}}, nil
 	}
-	accepted := map[string]bool{}
+	accepted := map[string]int{}
 	suffix := ""
 	if k.Baseline {
 		path, err := BaselinePath(k.ID)
@@ -76,13 +77,14 @@ func checkExternal(ctx *Context, k registry.Check) ([]Finding, error) {
 			return nil, err
 		}
 		for _, b := range base {
-			accepted[b] = true
+			accepted[b]++
 		}
 		suffix = " (not in " + path + "; fix it)"
 	}
 	var out []Finding
 	for _, l := range lines {
-		if accepted[Normalize(l)] {
+		if n := Normalize(l); accepted[n] > 0 {
+			accepted[n]--
 			continue
 		}
 		out = append(out, Finding{Entry: entry, Message: l + suffix})
@@ -152,8 +154,8 @@ func BaselinePath(id string) (string, error) {
 	return BaselineDir + "/" + id + ".txt", nil
 }
 
-// ReadBaseline returns the normalized findings accepted for check id; a
-// missing file accepts nothing.
+// ReadBaseline returns the normalized findings accepted for check id, one
+// per accepted finding (duplicates kept); a missing file accepts nothing.
 func ReadBaseline(root, id string) ([]string, error) {
 	path, err := BaselinePath(id)
 	if err != nil {
@@ -175,17 +177,23 @@ func ReadBaseline(root, id string) ([]string, error) {
 	return out, nil
 }
 
+// BaselineSample is how many newly accepted findings RecordBaseline
+// returns for a human to check.
+const BaselineSample = 5
+
 // BaselineResult reports what RecordBaseline wrote.
 type BaselineResult struct {
-	Check    string `json:"check"`
-	Path     string `json:"path"`
-	Findings int    `json:"findings"`
-	Added    int    `json:"added"`
-	Removed  int    `json:"removed"`
+	Check       string   `json:"check"`
+	Path        string   `json:"path"`
+	Findings    int      `json:"findings"`
+	Added       int      `json:"added"`
+	Removed     int      `json:"removed"`
+	AddedSample []string `json:"added_sample"` // up to BaselineSample added lines
 }
 
-// RecordBaseline runs k and writes its normalized findings, sorted and
-// deduplicated, as the accepted baseline.
+// RecordBaseline runs k and writes its normalized findings, one line per
+// finding, sorted with duplicates kept, as the accepted baseline. Counts
+// compare the old and new files as multisets.
 func RecordBaseline(root string, k registry.Check) (*BaselineResult, error) {
 	path, err := BaselinePath(k.ID)
 	if err != nil {
@@ -199,28 +207,31 @@ func RecordBaseline(root string, k registry.Check) (*BaselineResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	now := map[string]bool{}
+	sorted := make([]string, 0, len(lines))
 	for _, l := range lines {
-		now[Normalize(l)] = true
-	}
-	was := map[string]bool{}
-	for _, l := range old {
-		was[l] = true
-	}
-	res := &BaselineResult{Check: ExternalPrefix + k.ID, Path: path, Findings: len(now)}
-	sorted := make([]string, 0, len(now))
-	for l := range now {
-		sorted = append(sorted, l)
-		if !was[l] {
-			res.Added++
-		}
-	}
-	for l := range was {
-		if !now[l] {
-			res.Removed++
+		if n := Normalize(l); n != "" {
+			sorted = append(sorted, n)
 		}
 	}
 	sort.Strings(sorted)
+	was := map[string]int{}
+	for _, l := range old {
+		was[l]++
+	}
+	res := &BaselineResult{Check: ExternalPrefix + k.ID, Path: path, Findings: len(sorted), AddedSample: []string{}}
+	for _, l := range sorted {
+		if was[l] > 0 {
+			was[l]--
+			continue
+		}
+		res.Added++
+		if len(res.AddedSample) < BaselineSample {
+			res.AddedSample = append(res.AddedSample, l)
+		}
+	}
+	for _, n := range was {
+		res.Removed += n
+	}
 	content := strings.Join(sorted, "\n")
 	if content != "" {
 		content += "\n"

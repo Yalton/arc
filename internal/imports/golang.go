@@ -3,6 +3,7 @@ package imports
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"go/parser"
 	"go/token"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // goImports parses each file's import block for raw paths and lines, and
@@ -94,13 +96,24 @@ func newGoResolver(root string, files []string) *goResolver {
 	return r
 }
 
+// goListTimeout bounds one go list run; on expiry the go.mod fallback
+// applies as for any other go list failure. goListWaitDelay bounds the wait
+// for its output pipes after the process is killed.
+var (
+	goListTimeout   = 2 * time.Minute
+	goListWaitDelay = 5 * time.Second
+)
+
 // list runs go list on the package patterns in module dir and records every
 // in-repo package and module it reports, including test imports and
 // dependencies. Failures are tolerated: whatever was printed is used, and
 // the go.mod module path remains as a fallback. The network and toolchain
 // downloads are off so the gate stays deterministic.
 func (r *goResolver) list(dir string, pats []string) {
-	cmd := exec.Command("go", append([]string{"list", "-e", "-json", "-deps", "-test"}, pats...)...)
+	ctx, cancel := context.WithTimeout(context.Background(), goListTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", append([]string{"list", "-e", "-json", "-deps", "-test"}, pats...)...)
+	cmd.WaitDelay = goListWaitDelay
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOPROXY=off", "GOTOOLCHAIN=local")
 	var stdout bytes.Buffer
