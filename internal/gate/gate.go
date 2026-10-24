@@ -93,6 +93,7 @@ var Checks = []Check{
 	{"registry", checkRegistry},
 	{"placement", checkPlacement},
 	{"structure", checkStructure},
+	{"boundaries", checkBoundaries},
 	{"reasons", checkReasons},
 	{"flags", checkFlags},
 	{"removals", checkRemovals},

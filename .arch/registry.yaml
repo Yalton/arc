@@ -79,6 +79,16 @@ concepts:
       - Judge only the change set unless --all; pre-existing problems in untouched files pass.
       - Every finding names the registry entry and the fix.
 
+  - id: imports
+    name: Import extraction
+    summary: Imports of Go, Python and TS/JS files resolved to repository paths, for the boundaries check.
+    paths: ["internal/imports/**"]
+    aliases: [import, boundary, go list, require]
+    reason: Boundary enforcement needs per-language import resolution kept apart from the checks that judge it.
+    rules:
+      - Go resolves through go list with network and toolchain downloads off; Python and TS/JS parse import lines.
+      - Never fail on unparseable source; report what was read.
+
   - id: brief
     name: Brief and place
     summary: Owning-concept lookup with closest-concept suggestions, and compact agent-facing briefs.
