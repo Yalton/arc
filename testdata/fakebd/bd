@@ -30,7 +30,11 @@ note)
 	cat >> "$d/stdin"
 	echo "✓ Note added to $2" ;;
 label)
-	echo "✓ Added label '$4' to $3" ;;
+	case "$2" in
+	add) echo "✓ Added label '$4' to $3" ;;
+	remove) echo "✓ Removed label '$4' from $3" ;;
+	*) echo "fake bd: unsupported: $*" >&2; exit 1 ;;
+	esac ;;
 create)
 	printf '== create\n' >> "$d/stdin"
 	cat >> "$d/stdin"

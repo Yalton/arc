@@ -171,14 +171,33 @@ func TestTriageSkipsNoteWithSameDecision(t *testing.T) {
 	}
 }
 
-func TestTriageNeverRemovesLabels(t *testing.T) {
+func TestTriageSwapsOppositeLabel(t *testing.T) {
 	c, state := fakeBd(t)
-	b := Bead{ID: "t-1", Description: "no template", Labels: []string{LabelOK}}
-	if _, err := Triage(c, testRegistry(t), b, now, false); err != nil {
-		t.Fatal(err)
+	reg := testRegistry(t)
+	b := Bead{ID: "t-1", Description: "no template", Labels: []string{LabelOK, "keep"}}
+	r, err := Triage(c, reg, b, now, false)
+	if err != nil || !r.LabelAdded || r.LabelRemoved != LabelOK {
+		t.Fatalf("got %+v %v", r, err)
 	}
 	calls := readState(t, state, "calls")
-	if !strings.Contains(calls, "label add t-1 arch:review") || strings.Contains(calls, "remove") {
+	if !strings.Contains(calls, "label add t-1 arch:review\nlabel remove t-1 arch:ok\n") || strings.Contains(calls, "keep") {
+		t.Fatalf("calls %q", calls)
+	}
+	// Fixed and re-triaged: arch:ok replaces arch:review.
+	b = Bead{ID: "t-2", Description: goodDesc, Labels: []string{LabelReview, "keep"}}
+	if r, err = Triage(c, reg, b, now, false); err != nil || !r.LabelAdded || r.LabelRemoved != LabelReview {
+		t.Fatalf("got %+v %v", r, err)
+	}
+	calls = readState(t, state, "calls")
+	if !strings.Contains(calls, "label add t-2 arch:ok\nlabel remove t-2 arch:review\n") || strings.Contains(calls, "keep") {
+		t.Fatalf("calls %q", calls)
+	}
+	// Only the opposite label is removed, and only when present.
+	b = Bead{ID: "t-3", Description: goodDesc, Labels: []string{"arch:consolidation"}}
+	if r, err = Triage(c, reg, b, now, false); err != nil || r.LabelRemoved != "" {
+		t.Fatalf("got %+v %v", r, err)
+	}
+	if calls = readState(t, state, "calls"); strings.Contains(calls, "remove t-3") {
 		t.Fatalf("calls %q", calls)
 	}
 }

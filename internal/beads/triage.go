@@ -49,6 +49,7 @@ type Result struct {
 	Note            string       `json:"note,omitempty"` // the note triage appends
 	NoteAdded       bool         `json:"note_added"`
 	LabelAdded      bool         `json:"label_added"`
+	LabelRemoved    string       `json:"label_removed,omitempty"` // the opposite arch:ok/arch:review label triage removed
 	Error           string       `json:"error,omitempty"`
 }
 
@@ -173,8 +174,9 @@ func sameDecision(notes, note string) bool {
 
 // Triage analyses b and, unless dryRun, appends the note (skipped when the
 // most recent triage note has the same label and reasons, since the brief
-// in it changes with the date) and adds the label (skipped when present).
-// It never removes labels.
+// in it changes with the date), adds the label (skipped when present) and
+// removes the opposite one of arch:ok and arch:review when present. It
+// never touches other labels.
 func Triage(c *Client, reg *registry.Registry, b Bead, now time.Time, dryRun bool) (Result, error) {
 	r := Analyze(reg, b, now)
 	if dryRun {
@@ -192,7 +194,21 @@ func Triage(c *Client, reg *registry.Registry, b Bead, now time.Time, dryRun boo
 		}
 		r.LabelAdded = true
 	}
+	if opp := opposite(r.Label); b.HasLabel(opp) {
+		if err := c.RemoveLabel(b.ID, opp); err != nil {
+			return r, err
+		}
+		r.LabelRemoved = opp
+	}
 	return r, nil
+}
+
+// opposite returns the triage label that label replaces.
+func opposite(label string) string {
+	if label == LabelOK {
+		return LabelReview
+	}
+	return LabelOK
 }
 
 // ResolveConcepts returns, in registry order, the concepts text refers to

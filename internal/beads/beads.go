@@ -144,6 +144,16 @@ func (c *Client) AddLabel(id, label string) error {
 	return err
 }
 
+// RemoveLabel removes label from the bead ('bd label remove <id> <label>';
+// bd 1.3.0 succeeds when the label is absent).
+func (c *Client) RemoveLabel(id, label string) error {
+	if err := checkID(id); err != nil {
+		return err
+	}
+	_, err := c.run(nil, "label", "remove", id, label)
+	return err
+}
+
 // Note appends text to the bead's notes ('bd note <id> --stdin').
 func (c *Client) Note(id, text string) error {
 	if err := checkID(id); err != nil {

@@ -114,6 +114,9 @@ func TestWritesUseExpectedCommands(t *testing.T) {
 	if err := c.AddLabel("tst-1", "arch:ok"); err != nil {
 		t.Fatal(err)
 	}
+	if err := c.RemoveLabel("tst-1", "arch:review"); err != nil {
+		t.Fatal(err)
+	}
 	if err := c.Note("tst-1", "-starts with a dash\nline 2"); err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +127,7 @@ func TestWritesUseExpectedCommands(t *testing.T) {
 	calls := readState(t, state, "calls")
 	for _, want := range []string{
 		"label add tst-1 arch:ok",
+		"label remove tst-1 arch:review",
 		"note tst-1 --stdin",
 		"create --title=T --stdin --json --labels=x,y",
 	} {
@@ -203,7 +207,13 @@ func TestRealBd(t *testing.T) {
 	if err := c.Note(id, "second"); err != nil {
 		t.Fatal(err)
 	}
+	if err := c.AddLabel(id, "arch:review"); err != nil {
+		t.Fatal(err)
+	}
 	if err := c.AddLabel(id, "arch:ok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RemoveLabel(id, "arch:review"); err != nil {
 		t.Fatal(err)
 	}
 	b, err := c.Show(id)
@@ -212,7 +222,7 @@ func TestRealBd(t *testing.T) {
 	}
 	if b.Title != "Add goal export" || b.Description != "Concepts touched: goal\nline 2" ||
 		!strings.Contains(b.Notes, "first") || !strings.Contains(b.Notes, "second") ||
-		!b.HasLabel("arch:ok") || !b.HasLabel("foo") || b.Status != "open" {
+		!b.HasLabel("arch:ok") || b.HasLabel("arch:review") || !b.HasLabel("foo") || b.Status != "open" {
 		t.Fatalf("got %+v", b)
 	}
 	if ts, ok := b.Created(); !ok || time.Since(ts) > time.Hour {

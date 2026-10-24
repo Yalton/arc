@@ -101,6 +101,22 @@ func TestTriageOKAndReview(t *testing.T) {
 	}
 }
 
+func TestTriageReplacesReviewWithOK(t *testing.T) {
+	state := beadsRepo(t)
+	fakeShow(t, state, "t-1", okDesc, "arch:review", "other")
+	code, out, errOut := runArc("triage", "t-1", "--json")
+	var rep triageReport
+	if code != exitOK || json.Unmarshal([]byte(out), &rep) != nil || len(rep.Results) != 1 ||
+		rep.Results[0].Label != "arch:ok" || rep.Results[0].LabelRemoved != "arch:review" {
+		t.Fatalf("code %d out %s stderr %q", code, out, errOut)
+	}
+	calls := fakeState(t, state, "calls")
+	if !strings.Contains(calls, "label add t-1 arch:ok\n") || !strings.Contains(calls, "label remove t-1 arch:review\n") ||
+		strings.Contains(calls, "other") {
+		t.Fatalf("calls %q", calls)
+	}
+}
+
 func TestTriageDryRunJSON(t *testing.T) {
 	state := beadsRepo(t)
 	fakeShow(t, state, "t-1", okDesc)

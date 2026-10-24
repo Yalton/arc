@@ -261,6 +261,9 @@ For each bead (`--new`: open beads without an `arch:*` label):
 4. Labels: `arch:ok` if fields are present, at least one concept resolved and
    no non-goal matched; otherwise `arch:review` with a note giving the
    reasons. Beads that name a concept not in the registry get `arch:review`.
+   Applying one of `arch:ok` and `arch:review` removes the other if present
+   (a bead fixed after review ends up with only `arch:ok`); triage touches no
+   other labels.
 
 `--dry-run` prints without writing. Re-triage skips the note when the bead's
 most recent arc triage note has the same label and reasons (the brief in it
@@ -290,8 +293,8 @@ Registry validation only.
 ## Beads integration details
 
 - Detection: `bd` on `PATH` and `bd where` succeeds.
-- All access via `bd show --json`, `bd label add`, `bd note`/`bd update`,
-  `bd create`. No direct database access.
+- All access via `bd show --json`, `bd label add`/`bd label remove`,
+  `bd note`/`bd update`, `bd create`. No direct database access.
 - Labels used: `arch:ok`, `arch:review`, `arch:consolidation`,
   `arc:<entry-id>`.
 - `brief --bead` and `triage` are the only commands that read beads; `audit
