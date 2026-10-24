@@ -281,7 +281,8 @@ Deterministic drift report:
 `--prompt` prints the architect prompt with the report embedded, for any agent
 to run. `--file-beads` (beads only) creates one bead per expired flag and
 overdue removal, labelled `arch:consolidation`, deduplicated by an
-`arc:<entry-id>` label.
+`arc:<entry-id>` label on any bead, open or closed, so closed work is not
+filed again.
 
 ### `arc validate`
 
@@ -290,12 +291,13 @@ Registry validation only.
 ## Beads integration details
 
 - Detection: `bd` on `PATH` and `bd where` succeeds.
-- All access via `bd show --json`, `bd label add`, `bd note`/`bd update`,
-  `bd create`. No direct database access.
+- All access via `bd show --json`, `bd list --json`, `bd label add`,
+  `bd note`/`bd update`, `bd create`. No direct database access.
 - Labels used: `arch:ok`, `arch:review`, `arch:consolidation`,
   `arc:<entry-id>`.
-- `brief --bead` and `triage` are the only commands that read beads; `audit
-  --file-beads` and `triage` are the only ones that write.
+- `brief --bead`, `triage` and `audit` (removal bead status, and
+  `--file-beads` deduplication) are the only commands that read beads;
+  `audit --file-beads` and `triage` are the only ones that write.
 
 ## Code layout (arc's own)
 

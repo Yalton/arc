@@ -135,6 +135,20 @@ func (c *Client) List(status, withoutLabelPrefix string) ([]Bead, error) {
 	return kept, nil
 }
 
+// ListLabelled returns every bead, open or closed, carrying a label that
+// matches the glob pattern ('bd list --all --label-pattern=<p> --json').
+func (c *Client) ListLabelled(pattern string) ([]Bead, error) {
+	out, err := c.run(nil, "list", "--all", "--label-pattern="+pattern, "--limit=0", "--json")
+	if err != nil {
+		return nil, err
+	}
+	var bs []Bead
+	if err := json.Unmarshal(out, &bs); err != nil {
+		return nil, fmt.Errorf("bd list: parsing output: %v", err)
+	}
+	return bs, nil
+}
+
 // AddLabel adds label to the bead ('bd label add <id> <label>').
 func (c *Client) AddLabel(id, label string) error {
 	if err := checkID(id); err != nil {
