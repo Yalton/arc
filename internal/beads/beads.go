@@ -185,6 +185,7 @@ func (c *Client) run(stdin *strings.Reader, args ...string) ([]byte, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.Bin, args...)
 	cmd.Dir = c.Root
+	cmd.WaitDelay = time.Second // do not wait on children that keep bd's pipes open
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}

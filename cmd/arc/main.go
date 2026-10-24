@@ -25,6 +25,7 @@ var handlers = map[string]func(*output, []string) int{
 	"init":     runInit,
 	"place":    runPlace,
 	"render":   runRender,
+	"triage":   runTriage,
 	"validate": runValidate,
 	"version":  runVersion,
 }
