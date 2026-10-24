@@ -185,14 +185,13 @@ func (r *Report) addLOC(o Options) error {
 	}
 	oldLOC := map[string]int{}
 	if r.Base != "" {
-		old, err := gitx.TreeFiles(o.Root, r.Base)
+		counted := func(f string) bool { return o.Reg.Owner(f) != nil && !IsTest(f) }
+		old, err := gitx.TreeFiles(o.Root, r.Base, counted)
 		if err != nil {
 			return err
 		}
 		for f, data := range old {
-			if c := o.Reg.Owner(f); c != nil && !IsTest(f) {
-				oldLOC[c.ID] += len(gitx.ContentLines(data))
-			}
+			oldLOC[o.Reg.Owner(f).ID] += len(gitx.ContentLines(data))
 		}
 	}
 	r.Concepts = []ConceptLOC{}

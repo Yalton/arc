@@ -100,9 +100,10 @@ func Log(root, base string) ([]Commit, error) {
 }
 
 // TreeFiles returns the content of every regular file (mode 100644 or
-// 100755) in rev's tree, keyed by repo-relative path. Symlinks and
-// submodules are left out.
-func TreeFiles(root, rev string) (map[string][]byte, error) {
+// 100755) in rev's tree for which keep returns true (every one when keep is
+// nil), keyed by repo-relative path. Symlinks and submodules are left out.
+// Paths are filtered before any blob is read, so skipped files cost nothing.
+func TreeFiles(root, rev string, keep func(path string) bool) (map[string][]byte, error) {
 	out, err := run(root, nil, "ls-tree", "-r", "-z", "--full-tree", rev)
 	if err != nil {
 		return nil, err
@@ -114,6 +115,9 @@ func TreeFiles(root, rev string) (map[string][]byte, error) {
 		meta, path, ok := strings.Cut(entry, "\t")
 		f := strings.Fields(meta)
 		if !ok || len(f) != 3 || f[1] != "blob" || (f[0] != "100644" && f[0] != "100755") {
+			continue
+		}
+		if keep != nil && !keep(path) {
 			continue
 		}
 		paths = append(paths, path)

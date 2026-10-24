@@ -27,13 +27,30 @@ func TestHistory(t *testing.T) {
 	write(t, root, "dir/b c.txt", "x")
 	commitAll(t, root, "fix(a): two")
 
-	files, err := TreeFiles(root, first)
+	files, err := TreeFiles(root, first, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string][]byte{"a.txt": []byte("1\n2\n"), "bin.dat": []byte("\x00\x01")}
 	if !reflect.DeepEqual(files, want) {
 		t.Errorf("TreeFiles = %q", files)
+	}
+	var asked []string
+	files, err = TreeFiles(root, first, func(p string) bool {
+		asked = append(asked, p)
+		return p == "a.txt"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(files, map[string][]byte{"a.txt": []byte("1\n2\n")}) {
+		t.Errorf("TreeFiles filtered = %q", files)
+	}
+	if !reflect.DeepEqual(asked, []string{"a.txt", "bin.dat"}) {
+		t.Errorf("filter saw %q; want regular files only", asked)
+	}
+	if files, err = TreeFiles(root, first, func(string) bool { return false }); err != nil || len(files) != 0 {
+		t.Errorf("TreeFiles none = %q, %v", files, err)
 	}
 	cs, err := Log(root, first)
 	if err != nil {
