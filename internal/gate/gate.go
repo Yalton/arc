@@ -109,9 +109,11 @@ type Report struct {
 }
 
 // Run executes the checks named in only (all when empty) and collects
-// their findings. An unknown check id is an error.
+// their findings. The built-in checks are followed by one "checks.<id>"
+// check per registry check; "checks" selects all of those. An unknown
+// check id is an error.
 func Run(ctx *Context, only []string) (*Report, error) {
-	selected, err := selectChecks(only)
+	selected, err := selectChecks(append(Checks[:len(Checks):len(Checks)], externalChecks(ctx.Reg)...), only)
 	if err != nil {
 		return nil, err
 	}
@@ -138,23 +140,28 @@ func Run(ctx *Context, only []string) (*Report, error) {
 	return rep, nil
 }
 
-func selectChecks(only []string) ([]Check, error) {
+func selectChecks(checks []Check, only []string) ([]Check, error) {
 	if len(only) == 0 {
-		return Checks, nil
+		return checks, nil
 	}
 	want := map[string]bool{}
 	for _, id := range only {
 		found := false
-		for _, c := range Checks {
-			found = found || c.ID == id
+		for _, c := range checks {
+			match := c.ID == id || id == ExternalGroup && strings.HasPrefix(c.ID, ExternalPrefix)
+			found = found || match
+			want[c.ID] = want[c.ID] || match
 		}
-		if !found {
-			return nil, fmt.Errorf("unknown check %q (known: %s)", id, strings.Join(CheckIDs(), ", "))
+		if !found && id != ExternalGroup {
+			ids := make([]string, len(checks))
+			for i, c := range checks {
+				ids[i] = c.ID
+			}
+			return nil, fmt.Errorf("unknown check %q (known: %s)", id, strings.Join(append(ids, ExternalGroup), ", "))
 		}
-		want[id] = true
 	}
 	var out []Check
-	for _, c := range Checks {
+	for _, c := range checks {
 		if want[c.ID] {
 			out = append(out, c)
 		}
