@@ -80,24 +80,11 @@ func Analyze(reg *registry.Registry, b Bead, now time.Time) Result {
 			r.Reasons = append(r.Reasons, "missing template field: "+f)
 		}
 	}
-	resolved := map[string]bool{}
-	for _, id := range ResolveConcepts(reg, text) {
-		resolved[id] = true
-	}
-	for _, e := range conceptsTouched(text) {
-		if id := conceptFor(reg, e); id != "" {
-			resolved[id] = true
-		} else {
-			r.UnknownConcepts = append(r.UnknownConcepts, e)
-			r.Reasons = append(r.Reasons, fmt.Sprintf(
-				"'Concepts touched' names %q, which is not in the registry; use an existing concept or add it to %s with a reason",
-				e, registry.Path))
-		}
-	}
-	for _, c := range reg.Concepts {
-		if resolved[c.ID] {
-			r.Concepts = append(r.Concepts, c.ID)
-		}
+	r.Concepts, r.UnknownConcepts = beadConcepts(reg, text)
+	for _, e := range r.UnknownConcepts {
+		r.Reasons = append(r.Reasons, fmt.Sprintf(
+			"'Concepts touched' names %q, which is not in the registry; use an existing concept or add it to %s with a reason",
+			e, registry.Path))
 	}
 	if len(r.Concepts) == 0 {
 		r.Reasons = append(r.Reasons, "no registry concept resolved from the bead text; name concept ids, aliases or repo paths")
@@ -117,6 +104,35 @@ func Analyze(reg *registry.Registry, b Bead, now time.Time) Result {
 	}
 	r.Note = note(reg, r, now)
 	return r
+}
+
+// Concepts returns the concepts triage resolves for b, in registry order.
+func Concepts(reg *registry.Registry, b Bead) []string {
+	ids, _ := beadConcepts(reg, Text(b))
+	return ids
+}
+
+// beadConcepts resolves concepts from text (ResolveConcepts) plus the
+// entries of its 'Concepts touched' field; entries naming no registry
+// concept are returned as unknown.
+func beadConcepts(reg *registry.Registry, text string) (ids, unknown []string) {
+	resolved := map[string]bool{}
+	for _, id := range ResolveConcepts(reg, text) {
+		resolved[id] = true
+	}
+	for _, e := range conceptsTouched(text) {
+		if id := conceptFor(reg, e); id != "" {
+			resolved[id] = true
+		} else {
+			unknown = append(unknown, e)
+		}
+	}
+	for _, c := range reg.Concepts {
+		if resolved[c.ID] {
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids, unknown
 }
 
 func note(reg *registry.Registry, r Result, now time.Time) string {

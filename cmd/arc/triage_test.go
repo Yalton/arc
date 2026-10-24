@@ -147,3 +147,27 @@ func TestTriageUsageAndMissingBead(t *testing.T) {
 		t.Fatalf("code %d out %q", code, out)
 	}
 }
+
+func TestBriefBead(t *testing.T) {
+	state := beadsRepo(t)
+	fakeShow(t, state, "t-1", "Touches internal/goal/x.go")
+	code, out, _ := runArc("brief", "--bead", "t-1")
+	if code != exitOK || !strings.Contains(out, "Concept goal (Goal)") || !strings.Contains(out, "Goals are work nodes.") {
+		t.Fatalf("code %d out %q", code, out)
+	}
+	fakeShow(t, state, "t-2", "nothing relevant")
+	if code, out, errOut := runArc("brief", "--bead", "t-2"); code != exitOK || strings.Contains(out, "Concept goal") ||
+		!strings.Contains(errOut, "no concepts resolved") {
+		t.Fatalf("code %d out %q stderr %q", code, out, errOut)
+	}
+	if code, _, errOut := runArc("brief", "--bead", "t-404"); code != exitUsage || !strings.Contains(errOut, "not found") {
+		t.Fatalf("code %d stderr %q", code, errOut)
+	}
+	if code, _, _ := runArc("brief", "--bead", "t-1", "--concept", "goal"); code != exitUsage {
+		t.Fatalf("code %d", code)
+	}
+	os.WriteFile(filepath.Join(state, "nows"), nil, 0o644)
+	if code, _, errOut := runArc("brief", "--bead", "t-1"); code != exitUsage || !strings.Contains(errOut, "bead features skipped") {
+		t.Fatalf("code %d stderr %q", code, errOut)
+	}
+}
