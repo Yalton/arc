@@ -70,7 +70,9 @@ jobs:
           echo "$RUNNER_TEMP/arc-bin" >> "$GITHUB_PATH"
       - name: arc gate (pull request)
         if: github.event_name == 'pull_request'
-        run: arc gate --base "origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: arc gate --base "origin/$BASE_REF"
       - name: arc gate (whole tree)
         if: github.event_name != 'pull_request'
         run: arc gate --all

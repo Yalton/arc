@@ -27,4 +27,6 @@ jobs:
         run: go run ./cmd/arc gate --all
       - name: arc gate (pull request)
         if: github.event_name == 'pull_request'
-        run: go run ./cmd/arc gate --base "origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: go run ./cmd/arc gate --base "origin/$BASE_REF"

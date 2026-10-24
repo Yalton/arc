@@ -145,7 +145,7 @@ Validation rules (`arc validate`, also run by `gate`):
 ## Commands
 
 All commands accept `--json`. Exit codes: `0` ok, `1` violations found, `2`
-usage or configuration error.
+usage, configuration or environment error (including a failed `bd` call).
 
 ### `arc init [--scan] [--claude] [--codex] [--opencode] [--ci github|gitea]`
 
