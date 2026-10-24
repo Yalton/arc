@@ -43,6 +43,7 @@ func sampleReport() *Report {
 		Hotspots:           []Hotspot{{"internal/a/a.go", 2}},
 		Unowned:            []string{"other/x.go"},
 		Drafts:             []string{"beta"},
+		NoReason:           []string{"alpha"},
 		MultiStorage:       []ConceptStorage{{"beta", []string{"t1", "t2"}}},
 		ExpiredFlags:       []FlagItem{{Name: "OLD_FLAG", Concept: "alpha", Expires: "2026-01-10", Bead: "t-9"}},
 		OverdueRemovals:    []RemovalItem{{ID: "old-a", What: "legacy a", ReplacedBy: "alpha", RemoveBy: "2026-01-14", Bead: "t-1"}},

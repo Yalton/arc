@@ -32,8 +32,8 @@ Using only the evidence below, propose:
    but whose paths remain, and dead code reported by external checks.
 3. Registry changes: an owner for every unowned file (extend an existing
    concept before adding one), refined draft concepts (summary, rules,
-   reason, then drop `draft: true`), and new rules or boundaries the
-   evidence calls for.
+   reason, then drop `draft: true`), a `reason` for every concept listed
+   without one, and new rules or boundaries the evidence calls for.
 
 Give every proposal a reason that cites the report. Prefer extending or
 merging concepts over adding new ones. Replacing something means deleting
@@ -83,6 +83,9 @@ Unowned files: 1
 
 Draft concepts: 1
   beta
+
+Concepts without a reason: 1
+  alpha
 
 Concepts owning several tables: 1
   beta: t1, t2

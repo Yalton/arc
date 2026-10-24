@@ -49,6 +49,7 @@ type Report struct {
 	Hotspots           []Hotspot        `json:"hotspots"`
 	Unowned            []string         `json:"unowned_files"`
 	Drafts             []string         `json:"draft_concepts"`
+	NoReason           []string         `json:"concepts_without_reason"` // non-draft only
 	MultiStorage       []ConceptStorage `json:"multi_storage_concepts"`
 	ExpiredFlags       []FlagItem       `json:"expired_flags"`
 	OverdueRemovals    []RemovalItem    `json:"overdue_removals"`
@@ -145,7 +146,7 @@ func Build(o Options) (*Report, error) {
 	from := now.AddDate(0, 0, -days)
 	rep := &Report{
 		Since: o.Since, From: from.Format(time.RFC3339), To: now.Format(time.RFC3339),
-		Hotspots: []Hotspot{}, Unowned: []string{}, Drafts: []string{}, MultiStorage: []ConceptStorage{},
+		Hotspots: []Hotspot{}, Unowned: []string{}, Drafts: []string{}, NoReason: []string{}, MultiStorage: []ConceptStorage{},
 		ExpiredFlags: []FlagItem{}, OverdueRemovals: []RemovalItem{}, ClosedBeadRemovals: []RemovalItem{},
 		Checks: []CheckResult{}, Notices: []string{},
 	}
@@ -256,6 +257,8 @@ func (r *Report) addRegistry(o Options, now time.Time) {
 	for _, c := range o.Reg.Concepts {
 		if c.Draft {
 			r.Drafts = append(r.Drafts, c.ID)
+		} else if c.Reason == "" {
+			r.NoReason = append(r.NoReason, c.ID)
 		}
 		if len(c.Storage) > 1 {
 			r.MultiStorage = append(r.MultiStorage, ConceptStorage{ID: c.ID, Storage: c.Storage})

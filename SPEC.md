@@ -296,7 +296,8 @@ Deterministic drift report:
 - non-test LOC per concept, now vs `--since` (from git history);
 - lines added vs deleted; `fix:` vs `feat:` commit ratio;
 - hotspot files (most fix commits);
-- unowned files; draft concepts; concepts owning several tables;
+- unowned files; draft concepts; non-draft concepts without a `reason`;
+  concepts owning several tables;
 - expired flags, overdue removals, removals whose bead is closed but paths
   remain;
 - external check findings, including baselined ones (with counts).

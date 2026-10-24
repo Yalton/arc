@@ -166,6 +166,9 @@ func TestBuildReport(t *testing.T) {
 		!reflect.DeepEqual(rep.MultiStorage, []ConceptStorage{{"beta", []string{"t1", "t2"}}}) {
 		t.Errorf("drafts %v multi %v", rep.Drafts, rep.MultiStorage)
 	}
+	if !reflect.DeepEqual(rep.NoReason, []string{"alpha"}) {
+		t.Errorf("concepts without reason = %v (drafts are excluded)", rep.NoReason)
+	}
 	if len(rep.ExpiredFlags) != 1 || rep.ExpiredFlags[0].Name != "OLD_FLAG" {
 		t.Errorf("expired flags = %+v", rep.ExpiredFlags)
 	}
@@ -196,6 +199,7 @@ func TestBuildReport(t *testing.T) {
 		"fix: 2, feat: 1 (fix/feat 2.00)",
 		"    2  internal/a/a.go",
 		"Unowned files: 1\n  other/x.go",
+		"Concepts without a reason: 1\n  alpha",
 		"Expired flags: 1\n  OLD_FLAG (alpha) expired 2026-01-10 [bead t-9]",
 		"Overdue removals: 1\n  old-a (legacy a) due 2026-01-14, replaced by alpha [bead t-1]",
 		"checks.lint: 2 finding(s), 1 baselined, 1 new\n    y.go:2: worse",

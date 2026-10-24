@@ -15,6 +15,9 @@ Unowned files: 1
 Draft concepts: 1
   beta
 
+Concepts without a reason: 1
+  alpha
+
 Concepts owning several tables: 1
   beta: t1, t2
 

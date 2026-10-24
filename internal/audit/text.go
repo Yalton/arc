@@ -51,6 +51,7 @@ func (r *Report) Text() string {
 
 	list(&w, "Unowned files", r.Unowned)
 	list(&w, "Draft concepts", r.Drafts)
+	list(&w, "Concepts without a reason", r.NoReason)
 	var multi []string
 	for _, c := range r.MultiStorage {
 		multi = append(multi, c.ID+": "+strings.Join(c.Storage, ", "))
