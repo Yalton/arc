@@ -30,4 +30,5 @@ the section.
 | initcmd (Init) | `internal/initcmd/**` |  |  | arc init — registry skeleton, --scan drafts, render, pre-commit hook and harness setup. *Why:* Adoption must be one idempotent command that never destroys existing files or hooks. |
 | hook (Harness hooks) | `internal/hook/**`, `adapters/**` |  |  | Harness-agnostic hook decisions plus per-harness payload adapters. *Why:* Harness integrations stay thin adapters over shared decisions (SPEC principle 2). |
 | beads (Beads integration) | `internal/beads/**` |  |  | bd CLI wrapper and bead triage against the registry; optional, skipped when bd or a workspace is missing. *Why:* Beads is reached only through the bd CLI (SPEC principle 4); one wrapper keeps that rule and the triage logic in one place. |
+| audit (Audit) | `internal/audit/**` |  |  | arc audit — deterministic drift report from registry and git history, the architect prompt around it, and filing consolidation beads. *Why:* Drift is judged by an architect agent the caller runs (SPEC principle 1); arc only gathers the facts reproducibly and prints the prompt. |
 <!-- arc:end -->
