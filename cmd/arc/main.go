@@ -20,6 +20,7 @@ var commands = []string{
 // handlers maps implemented commands to their entry points.
 var handlers = map[string]func(*output, []string) int{
 	"gate":     runGate,
+	"audit":    runAudit,
 	"baseline": runBaseline,
 	"brief":    runBrief,
 	"hook":     runHook,

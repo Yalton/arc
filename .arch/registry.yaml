@@ -127,6 +127,16 @@ concepts:
       - Run bd as a subprocess with a timeout; never open the beads database.
       - Missing bd or workspace is a notice, never an error; arc never closes, reprioritizes or deletes beads, and only adds labels.
 
+  - id: audit
+    name: Audit
+    summary: arc audit — deterministic drift report from registry and git history, the architect prompt around it, and filing consolidation beads.
+    paths: ["internal/audit/**"]
+    aliases: [drift, report, architect, prompt, hotspot, consolidation]
+    reason: Drift is judged by an architect agent the caller runs (SPEC principle 1); arc only gathers the facts reproducibly and prints the prompt.
+    rules:
+      - Never call a model; --prompt prints text for the caller to run.
+      - Output depends only on repository state, the window and the clock passed in; findings never fail the command.
+
 limits:
   file_lines: 1000
   function_lines: 150

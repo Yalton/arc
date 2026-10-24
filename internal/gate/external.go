@@ -65,31 +65,49 @@ func checkExternal(ctx *Context, k registry.Check) ([]Finding, error) {
 	if err != nil {
 		return []Finding{{Path: registry.Path, Entry: entry, Message: err.Error()}}, nil
 	}
-	accepted := map[string]int{}
 	suffix := ""
 	if k.Baseline {
 		path, err := BaselinePath(k.ID)
 		if err != nil {
 			return []Finding{{Path: registry.Path, Entry: entry, Message: err.Error()}}, nil
 		}
-		base, err := ReadBaseline(ctx.Root, k.ID)
+		suffix = " (not in " + path + "; fix it)"
+	}
+	fresh, _, err := SplitBaselined(ctx.Root, k, lines)
+	if err != nil {
+		return nil, err
+	}
+	var out []Finding
+	for _, l := range fresh {
+		out = append(out, Finding{Entry: entry, Message: l + suffix})
+	}
+	return out, nil
+}
+
+// SplitBaselined separates k's findings into those beyond its baseline
+// (fresh, in output order) and the number the baseline accepts. Without
+// baseline: true every finding is fresh. The baseline is a multiset: a
+// finding is accepted as often as its normalized form occurs in it.
+func SplitBaselined(root string, k registry.Check, lines []string) (fresh []string, baselined int, err error) {
+	accepted := map[string]int{}
+	if k.Baseline {
+		base, err := ReadBaseline(root, k.ID)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		for _, b := range base {
 			accepted[b]++
 		}
-		suffix = " (not in " + path + "; fix it)"
 	}
-	var out []Finding
 	for _, l := range lines {
 		if n := Normalize(l); accepted[n] > 0 {
 			accepted[n]--
+			baselined++
 			continue
 		}
-		out = append(out, Finding{Entry: entry, Message: l + suffix})
+		fresh = append(fresh, l)
 	}
-	return out, nil
+	return fresh, baselined, nil
 }
 
 // RunExternal runs k's command (argv, no shell) in root and returns the

@@ -1,0 +1,115 @@
+You are the architect for demo. Review the drift report and the
+architecture registry below and propose how to bring the codebase back
+inside its architecture. arc, a deterministic CLI, gathered this data; it
+never runs a model. Whoever runs you applies what you propose.
+
+## How the registry works
+
+`.arch/registry.yaml` is the single source of truth. `ARCHITECTURE.md` and the
+agent snippets are rendered from it (`arc render`), and `arc gate` enforces
+it in pre-commit and CI.
+
+- concepts: each owns files through path globs (no file has two owners),
+  plus its storage tables and env vars, with agent-facing rules and a
+  reason it exists. `draft: true` marks a concept proposed by
+  `arc init --scan` that nobody has refined yet.
+- boundaries: import directions that are denied.
+- flags: temporary switches with an expiry date; past it, the rollout must
+  finish and the flag and its old code path go.
+- removals: replaced code scheduled for deletion by `remove_by`, usually
+  tracked by a bead.
+- checks: external tools (dead code, lint) with baselines of accepted
+  findings.
+
+## Your task
+
+Using only the evidence below, propose:
+
+1. Consolidations: concepts that overlap or duplicate each other, concepts
+   owning several tables, and fast-growing concepts or fix hotspots that
+   suggest a parallel implementation of something that already exists.
+2. Removals: expired flags, overdue removals, removals whose bead is closed
+   but whose paths remain, and dead code reported by external checks.
+3. Registry changes: an owner for every unowned file (extend an existing
+   concept before adding one), refined draft concepts (summary, rules,
+   reason, then drop `draft: true`), and new rules or boundaries the
+   evidence calls for.
+
+Give every proposal a reason that cites the report. Prefer extending or
+merging concepts over adding new ones. Replacing something means deleting
+the old code or adding a `removals` entry. If an area is healthy, say so
+and propose nothing for it.
+
+## Output format
+
+Answer with exactly these two sections.
+
+### Proposed registry diff
+
+One unified diff against `.arch/registry.yaml` in a ```diff block. Every
+added or changed concept has a `reason`; every scheduled deletion is a
+`removals` entry with `remove_by` and a bead.
+
+### Beads to file
+
+One entry per unit of work, each completable in one session:
+
+- Title
+- Description: what to change, which files or modules, and the test
+  command that proves it is done (`arc gate --all` plus the project's
+  tests)
+- Labels: `arch:consolidation`, plus `arc:<entry-id>` when it acts on a
+  registry entry (a flag name, removal id or concept id)
+
+If the repository uses beads, write each entry as a
+`bd create --title=... --labels=arch:consolidation,...` command with the
+description on stdin. Do not edit code; only propose.
+
+## Drift report
+
+arc audit: 2026-01-08T12:00:00Z to 2026-01-15T12:00:00Z (since 7d; base 0123456789ab)
+
+Non-test LOC per concept (window start -> now):
+  alpha    120 ->    180  (+60)
+  beta       0 ->     40  (+40)
+
+History: 6 commit(s), +300 -120 lines; fix: 2, feat: 4 (fix/feat 0.50)
+
+Hotspots (files by fix commits):
+    2  internal/a/a.go
+
+Unowned files: 1
+  other/x.go
+
+Draft concepts: 1
+  beta
+
+Concepts owning several tables: 1
+  beta: t1, t2
+
+Expired flags: 1
+  OLD_FLAG (alpha) expired 2026-01-10 [bead t-9]
+
+Overdue removals: 1
+  old-a (legacy a) due 2026-01-14, replaced by alpha [bead t-1]
+
+Removals whose bead is closed but paths remain: none
+
+External checks:
+  checks.lint: 2 finding(s), 1 baselined, 1 new
+    y.go:2: worse
+
+## Registry brief
+
+System: demo: Demo.
+Concept alpha (Alpha): A.
+  paths: internal/a/**
+Concept beta (Beta) [draft]: B.
+  paths: internal/b/**
+  storage: t1, t2
+Flags:
+- LIVE_FLAG (alpha, expires 2026-01-15): 
+Removals:
+- old-a: legacy a (replaced by alpha, remove by 2026-01-14 OVERDUE, t-1)
+- later:  (remove by 2027-01-01, t-2)
+- done:  (remove by 2026-01-01 OVERDUE)

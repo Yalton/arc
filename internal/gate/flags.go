@@ -1,17 +1,15 @@
 package gate
 
-import "arc/internal/registry"
+import (
+	"time"
 
-// checkFlags fails flags whose expiry date has passed. A flag is live
-// through its whole expires day. Unparseable dates are left to the
-// registry check.
+	"arc/internal/registry"
+)
+
+// checkFlags fails flags whose expiry date has passed.
 func checkFlags(ctx *Context) ([]Finding, error) {
-	today := ctx.Now.UTC().Format(registry.DateLayout)
 	var out []Finding
-	for _, f := range ctx.Reg.Flags {
-		if _, err := f.ExpiresAt(); err != nil || f.Expires >= today {
-			continue
-		}
+	for _, f := range ExpiredFlags(ctx.Reg, ctx.Now) {
 		out = append(out, Finding{
 			Path:  registry.Path,
 			Entry: "flags[" + f.Name + "]",
@@ -20,4 +18,18 @@ func checkFlags(ctx *Context) ([]Finding, error) {
 		})
 	}
 	return out, nil
+}
+
+// ExpiredFlags returns the flags past their expiry date, in registry
+// order. A flag is live through its whole expires day. Unparseable dates
+// are left to the registry check.
+func ExpiredFlags(reg *registry.Registry, now time.Time) []registry.Flag {
+	today := now.UTC().Format(registry.DateLayout)
+	var out []registry.Flag
+	for _, f := range reg.Flags {
+		if _, err := f.ExpiresAt(); err == nil && f.Expires < today {
+			out = append(out, f)
+		}
+	}
+	return out
 }
