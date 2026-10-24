@@ -6,7 +6,7 @@
   "hook_event_name": "PostToolUse",
   "tool_name": "Bash",
   "tool_input": {"command": "bd create \"Add goal export\" -p 2", "description": "File bead"},
-  "tool_response": {"stdout": "Created arc-1", "stderr": "", "interrupted": false, "isImage": false},
+  "tool_response": {"stdout": "✓ Created issue: arc-1 — Add goal export\n  Priority: P2\n  Status: open\n", "stderr": "", "interrupted": false, "isImage": false},
   "tool_use_id": "toolu_03",
   "duration_ms": 40
 }

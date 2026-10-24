@@ -56,7 +56,7 @@ func TestUnimplementedExits2(t *testing.T) {
 }
 
 func TestUnimplementedJSONError(t *testing.T) {
-	code, out, _ := runArc("triage", "--json")
+	code, out, _ := runArc("audit", "--json")
 	var v struct{ Error string }
 	if code != exitUsage || json.Unmarshal([]byte(out), &v) != nil || v.Error == "" {
 		t.Fatalf("code %d, out %q", code, out)

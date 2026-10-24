@@ -14,6 +14,12 @@ type claudePayload struct {
 	HookEventName string          `json:"hook_event_name"`
 	ToolName      string          `json:"tool_name"`
 	ToolInput     claudeToolInput `json:"tool_input"`
+	ToolResponse  json.RawMessage `json:"tool_response"` // PostToolUse only
+}
+
+// claudeBashResponse is the Bash tool_response of a PostToolUse payload.
+type claudeBashResponse struct {
+	Stdout string `json:"stdout"`
 }
 
 type claudeToolInput struct {
@@ -52,6 +58,10 @@ func ClaudeEvent(payload []byte) (Event, string, error) {
 	case "PostToolUse":
 		if p.ToolName == "Bash" {
 			ev.Kind, ev.Command = PostShell, p.ToolInput.Command
+			var r claudeBashResponse
+			if json.Unmarshal(p.ToolResponse, &r) == nil { // a non-object response just means no output
+				ev.Output = r.Stdout
+			}
 		}
 	}
 	return ev, p.HookEventName, nil

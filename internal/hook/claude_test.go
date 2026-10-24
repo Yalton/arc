@@ -57,12 +57,28 @@ func TestClaudeMalformedPayloadAllowed(t *testing.T) {
 	}
 }
 
-func TestClaudePostBashBdCreateNoop(t *testing.T) {
-	if _, raw, _ := claudeRun(t, newRepo(t), "post-bash-bd-create.json"); raw != "" {
-		t.Fatalf("M1 must not answer bd create, got %q", raw)
+func TestClaudePostBashBdCreateTriages(t *testing.T) {
+	root := newRepo(t)
+	state := fakeBd(t)
+	fakeShowBead(t, state, "arc-1", "Replaces / removes: none\nConcepts touched: goal\nClosest existing thing: internal/goal")
+	resp, _, stderr := claudeRun(t, root, "post-bash-bd-create.json")
+	h := resp.HookSpecificOutput
+	if h == nil || h.HookEventName != "PostToolUse" || h.PermissionDecision != "" ||
+		!strings.Contains(h.AdditionalContext, "arc-1: arch:ok (concepts: goal)") {
+		t.Fatalf("got %+v stderr %q", h, stderr)
 	}
-	ev, _, _ := ClaudeEvent([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"bd create x"}}`))
-	if ev.Kind != PostShell || ev.Command != "bd create x" {
-		t.Fatalf("event %+v", ev)
+	if calls := readFake(t, state, "calls"); !strings.Contains(calls, "show arc-1 --json") || !strings.Contains(calls, "label add arc-1 arch:ok") {
+		t.Fatalf("calls %q", calls)
+	}
+}
+
+func TestClaudeEventPostBashOutput(t *testing.T) {
+	ev, _, err := ClaudeEvent([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"bd create x"},"tool_response":{"stdout":"out"}}`))
+	if err != nil || ev.Kind != PostShell || ev.Command != "bd create x" || ev.Output != "out" {
+		t.Fatalf("event %+v %v", ev, err)
+	}
+	// Other tools may answer with a non-object; that must not break parsing.
+	if _, _, err := ClaudeEvent([]byte(`{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_response":"text"}`)); err != nil {
+		t.Fatal(err)
 	}
 }

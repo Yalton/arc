@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
+	"arc/internal/beads"
 	"arc/internal/brief"
 	"arc/internal/gitx"
 	"arc/internal/registry"
@@ -32,6 +34,7 @@ type Event struct {
 	Cwd       string   // the agent's working directory
 	Paths     []string // PreWrite targets, absolute or relative to Cwd
 	Command   string   // PostShell command line
+	Output    string   // PostShell stdout, when the harness provides it
 }
 
 // Decision is arc's answer. The zero value allows silently.
@@ -58,7 +61,7 @@ func Decide(ev Event, now time.Time) (d Decision) {
 	case PreWrite:
 		d, err = preWrite(ev, now)
 	case PostShell:
-		d = postShell(ev)
+		d, err = postShell(ev, now)
 	}
 	if err != nil {
 		return Decision{Warning: "arc hook: " + err.Error()}
@@ -120,12 +123,58 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 // bdCreate matches a 'bd create' invocation in a shell command line.
 var bdCreate = regexp.MustCompile(`(^|[\s;&|(])bd\s+create\b`)
 
-// postShell is the dispatch point for 'bd create' triage (M2).
-func postShell(ev Event) Decision {
-	if bdCreate.MatchString(ev.Command) {
-		return Decision{} // triage of the new bead arrives with M2
+// createdIssue finds bead ids in 'bd create' output
+// ("✓ Created issue: arc-1 — Title").
+var createdIssue = regexp.MustCompile(`Created issue:\s*([A-Za-z0-9][A-Za-z0-9._-]*)`)
+
+// newBeadWindow bounds the fallback when the output names no bead: open,
+// untriaged beads created this recently are taken to be the new ones.
+const newBeadWindow = 2 * time.Minute
+
+// postShell triages beads created by a 'bd create' shell command and
+// returns the outcome as context (SPEC.md, "arc hook").
+func postShell(ev Event, now time.Time) (Decision, error) {
+	if !bdCreate.MatchString(ev.Command) {
+		return Decision{}, nil
 	}
-	return Decision{}
+	root, err := findRoot(ev.Cwd)
+	if err != nil {
+		return Decision{}, nil
+	}
+	reg, err := registry.Load(root)
+	if errors.Is(err, registry.ErrNotFound) {
+		return Decision{}, nil
+	}
+	if err != nil {
+		return Decision{}, err
+	}
+	c, notice := beads.Open(root)
+	if c == nil {
+		return Decision{Warning: "arc hook: " + notice}, nil
+	}
+	var ids []string
+	for _, m := range createdIssue.FindAllStringSubmatch(ev.Output, -1) {
+		ids = appendUnique(ids, m[1])
+	}
+	results, err := beads.Run(c, reg, ids, now.Add(-newBeadWindow), now, false)
+	if err != nil {
+		return Decision{}, err
+	}
+	var d Decision
+	var lines, warnings []string
+	for _, r := range results {
+		if r.Error != "" {
+			warnings = append(warnings, "arc hook: triage "+r.ID+": "+r.Error)
+			continue
+		}
+		lines = append(lines, "- "+r.Summary())
+	}
+	d.Warning = strings.Join(warnings, "\n")
+	if len(lines) > 0 {
+		d.Context = "arc triage of the new bead(s):\n" + strings.Join(lines, "\n") +
+			"\nFor arch:review, fix the bead (template fields, existing concepts) or ask for review; the concept brief is in the bead notes."
+	}
+	return d, nil
 }
 
 // findRoot returns the git top-level containing dir, walking up to the

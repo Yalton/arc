@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -121,5 +122,75 @@ func TestBdCreateMatch(t *testing.T) {
 		if got := bdCreate.MatchString(cmd); got != want {
 			t.Errorf("%q: got %v", cmd, got)
 		}
+	}
+}
+
+// fakeBd puts testdata/fakebd first on PATH and returns its state dir.
+func fakeBd(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.Abs(filepath.Join("..", "..", "testdata", "fakebd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := t.TempDir()
+	t.Setenv("FAKEBD_DIR", state)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return state
+}
+
+func fakeShowBead(t *testing.T, state, id, desc string) {
+	t.Helper()
+	data, _ := json.Marshal([]map[string]any{{"id": id, "description": desc, "status": "open"}})
+	write(t, state, "show-"+id+".json", string(data))
+}
+
+func readFake(t *testing.T, state, name string) string {
+	t.Helper()
+	data, _ := os.ReadFile(filepath.Join(state, name))
+	return string(data)
+}
+
+func post(root, command, output string) Event {
+	return Event{Kind: PostShell, SessionID: "s1", Cwd: root, Command: command, Output: output}
+}
+
+func TestPostShellFallsBackToRecentNewBeads(t *testing.T) {
+	root := newRepo(t)
+	state := fakeBd(t)
+	recent := now.Add(-30 * time.Second).Format(time.RFC3339)
+	old := now.Add(-time.Hour).Format(time.RFC3339)
+	write(t, state, "list.json", `[
+	  {"id": "a-new", "status": "open", "created_at": "`+recent+`", "description": "Concepts touched: goal"},
+	  {"id": "a-old", "status": "open", "created_at": "`+old+`"},
+	  {"id": "a-done", "status": "open", "created_at": "`+recent+`", "labels": ["arch:ok"]}
+	]`)
+	d := Decide(post(root, "bd create --silent x", "a-new\n"), now)
+	if d.Deny || !strings.Contains(d.Context, "a-new: arch:review") ||
+		strings.Contains(d.Context, "a-old") || strings.Contains(d.Context, "a-done") {
+		t.Fatalf("got %+v", d)
+	}
+}
+
+func TestPostShellNeverBlocks(t *testing.T) {
+	root := newRepo(t)
+	state := fakeBd(t)
+	// Not a bd create: bd is not consulted.
+	if d := Decide(post(root, "bd list", ""), now); d != (Decision{}) || readFake(t, state, "calls") != "" {
+		t.Fatalf("got %+v", d)
+	}
+	// Bead cannot be read: warning only.
+	d := Decide(post(root, "bd create x", "✓ Created issue: a-404 — x"), now)
+	if d.Deny || d.Context != "" || !strings.Contains(d.Warning, "a-404") {
+		t.Fatalf("got %+v", d)
+	}
+	// No beads workspace: notice as a warning.
+	write(t, state, "nows", "")
+	if d := Decide(post(root, "bd create x", ""), now); d.Deny || d.Context != "" || !strings.Contains(d.Warning, "bead features skipped") {
+		t.Fatalf("got %+v", d)
+	}
+	// No registry: silent.
+	os.Remove(filepath.Join(root, ".arch/registry.yaml"))
+	if d := Decide(post(root, "bd create x", ""), now); d != (Decision{}) {
+		t.Fatalf("got %+v", d)
 	}
 }
