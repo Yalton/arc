@@ -1,0 +1,31 @@
+System: vapula: Runs operator goals as scheduled agent work.
+Non-goals:
+- no-web-ui: No browser UI; operators use the CLI and Gitea.
+Concept goal (Goal): The only representation of an operator goal.
+  why: Goals lived in three tables; one owner keeps them consistent.
+  paths: internal/workgraph/**
+  storage: work_nodes
+  env: WORKGRAPH_DB_URL
+  - Goals are work_nodes with kind=goal; no separate goals table.
+Concept shared (Shared utilities): Small helpers with no domain meaning.
+  paths: internal/util/**
+  - Nothing domain-specific; if it names a concept it belongs there.
+Concept scheduler (Scheduler): Decides when queued work runs.
+  paths: internal/scheduler/**, cmd/sched/**
+  env: SCHED_TICK
+  - One scheduler loop per process.
+Concept api (HTTP API): Operator-facing HTTP endpoints.
+  paths: internal/api/**
+  - Handlers never touch the store directly.
+Concept queue (Legacy queue): v1 job queue, being removed.
+  paths: internal/queue/*.go
+Concept docsgen (Docs generator) [draft]: Builds reference docs.
+  paths: tools/docs/**
+Boundaries:
+- writes-through-actions: internal/api/** must not import internal/store/**. All writes go through internal/actions.
+- scheduler-no-api: internal/scheduler/** must not import internal/api/**. The scheduler is headless.
+Flags:
+- USE_NEW_SCHEDULER (scheduler, expires 2026-12-01, vap-123): Gate the v2 scheduler during rollout.
+Removals:
+- old-queue: internal/queue (v1 job queue) (replaced by scheduler, remove by 2026-11-15, vap-130)
+- legacy-api-v1: v1 endpoints (replaced by api, remove by 2026-10-01 OVERDUE, vap-140)

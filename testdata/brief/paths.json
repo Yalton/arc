@@ -1,0 +1,109 @@
+{
+  "system": "vapula: Runs operator goals as scheduled agent work.",
+  "non_goals": [
+    {
+      "id": "no-web-ui",
+      "text": "No browser UI; operators use the CLI and Gitea."
+    }
+  ],
+  "paths": [
+    {
+      "path": "internal/api/v1/users.go",
+      "status": "owned",
+      "concept": "api"
+    },
+    {
+      "path": "internal/scheduler/run.go",
+      "status": "owned",
+      "concept": "scheduler"
+    },
+    {
+      "path": "internal/api/server.go",
+      "status": "owned",
+      "concept": "api"
+    },
+    {
+      "path": "docs/x.md",
+      "status": "ignored"
+    },
+    {
+      "path": "zzz/x.go",
+      "status": "unowned"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "scheduler",
+      "name": "Scheduler",
+      "summary": "Decides when queued work runs.",
+      "env": [
+        "SCHED_TICK"
+      ],
+      "rules": [
+        "One scheduler loop per process."
+      ]
+    },
+    {
+      "id": "api",
+      "name": "HTTP API",
+      "summary": "Operator-facing HTTP endpoints.",
+      "rules": [
+        "Handlers never touch the store directly."
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "writes-through-actions",
+      "from": [
+        "internal/api/**"
+      ],
+      "deny": [
+        "internal/store/**"
+      ],
+      "reason": "All writes go through internal/actions."
+    },
+    {
+      "id": "scheduler-no-api",
+      "from": [
+        "internal/scheduler/**"
+      ],
+      "deny": [
+        "internal/api/**"
+      ],
+      "reason": "The scheduler is headless."
+    }
+  ],
+  "flags": [
+    {
+      "name": "USE_NEW_SCHEDULER",
+      "concept": "scheduler",
+      "purpose": "Gate the v2 scheduler during rollout.",
+      "expires": "2026-12-01",
+      "bead": "vap-123"
+    }
+  ],
+  "removals": [
+    {
+      "id": "old-queue",
+      "what": "internal/queue (v1 job queue)",
+      "paths": [
+        "internal/queue/**"
+      ],
+      "replaced_by": "scheduler",
+      "remove_by": "2026-11-15",
+      "bead": "vap-130"
+    },
+    {
+      "id": "legacy-api-v1",
+      "what": "v1 endpoints",
+      "paths": [
+        "internal/api/v1/**"
+      ],
+      "replaced_by": "api",
+      "remove_by": "2026-10-01",
+      "bead": "vap-140",
+      "overdue": true
+    }
+  ]
+}

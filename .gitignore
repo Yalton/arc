@@ -5,3 +5,8 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Local agent tooling state
+.claude/settings.local.json
+.claude/.headroom_*
+.serena/

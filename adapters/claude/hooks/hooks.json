@@ -1,0 +1,17 @@
+{
+  "description": "arc architecture guardrails",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [{"type": "command", "command": "arc hook claude", "timeout": 10}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "arc hook claude", "timeout": 10}]
+      }
+    ]
+  }
+}

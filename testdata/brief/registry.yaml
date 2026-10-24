@@ -1,0 +1,102 @@
+version: 1
+
+system:
+  name: vapula
+  summary: |
+    Runs operator goals as scheduled agent work.
+    Second line is not shown in briefs.
+
+non_goals:
+  - id: no-web-ui
+    text: No browser UI; operators use the CLI and Gitea.
+    keywords: [web ui, dashboard]
+
+ignore:
+  - "**/*_test.go"
+  - "docs/**"
+
+concepts:
+  - id: goal
+    name: Goal
+    summary: The only representation of an operator goal.
+    reason: Goals lived in three tables; one owner keeps them consistent.
+    paths: ["internal/workgraph/**"]
+    storage: [work_nodes]
+    env: [WORKGRAPH_DB_URL]
+    aliases: [goal, objective]
+    rules:
+      - Goals are work_nodes with kind=goal; no separate goals table.
+
+  - id: shared
+    name: Shared utilities
+    summary: Small helpers with no domain meaning.
+    paths: ["internal/util/**"]
+    aliases: [util, helpers]
+    rules: [Nothing domain-specific; if it names a concept it belongs there.]
+
+  - id: scheduler
+    name: Scheduler
+    summary: Decides when queued work runs.
+    paths: ["internal/scheduler/**", "cmd/sched/**"]
+    env: [SCHED_TICK]
+    aliases: [scheduler, sched]
+    rules:
+      - One scheduler loop per process.
+
+  - id: api
+    name: HTTP API
+    summary: Operator-facing HTTP endpoints.
+    paths: ["internal/api/**"]
+    rules:
+      - Handlers never touch the store directly.
+
+  - id: queue
+    name: Legacy queue
+    summary: v1 job queue, being removed.
+    paths: ["internal/queue/*.go"]
+
+  - id: docsgen
+    name: Docs generator
+    summary: Builds reference docs.
+    paths: ["tools/docs/**"]
+    draft: true
+
+boundaries:
+  - id: writes-through-actions
+    from: ["internal/api/**"]
+    deny: ["internal/store/**"]
+    reason: All writes go through internal/actions.
+  - id: scheduler-no-api
+    from: ["internal/scheduler/**"]
+    deny: ["internal/api/**"]
+    reason: The scheduler is headless.
+
+flags:
+  - name: USE_NEW_SCHEDULER
+    concept: scheduler
+    purpose: Gate the v2 scheduler during rollout.
+    expires: 2026-12-01
+    bead: vap-123
+  - name: OLD_TICK
+    concept: scheduler
+    purpose: Expired flag, must not appear.
+    expires: 2026-01-01
+    bead: vap-99
+
+removals:
+  - id: old-queue
+    what: internal/queue (v1 job queue)
+    paths: ["internal/queue/**"]
+    replaced_by: scheduler
+    remove_by: 2026-11-15
+    bead: vap-130
+  - id: legacy-api-v1
+    what: v1 endpoints
+    paths: ["internal/api/v1/**"]
+    replaced_by: api
+    remove_by: 2026-10-01
+    bead: vap-140
+
+limits:
+  file_lines: 1000
+  function_lines: 150

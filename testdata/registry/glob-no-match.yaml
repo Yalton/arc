@@ -1,0 +1,8 @@
+version: 1
+concepts:
+  - id: goal
+    paths: ["internal/nothere/**"]
+boundaries:
+  - id: b
+    from: ["internal/api/**"]
+    deny: ["internal/absent/**"]

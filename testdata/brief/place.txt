@@ -1,0 +1,8 @@
+internal/workgraph/goal.go: goal
+internal/workgraph/goal_test.go: ignored
+docs/readme.md: ignored
+internal/objective/sched.go: unowned. Closest: goal (internal/workgraph), scheduler (internal/scheduler), shared (internal/util). Extend one, or add a concept to .arch/registry.yaml with a reason.
+internal/api2/helpers.go: unowned. Closest: shared (internal/util), goal (internal/workgraph), scheduler (internal/scheduler). Extend one, or add a concept to .arch/registry.yaml with a reason.
+internal/queue/v2/goal.go: unowned. Closest: queue (internal/queue), goal (internal/workgraph), shared (internal/util). Extend one, or add a concept to .arch/registry.yaml with a reason.
+cmd/sched2/main.go: unowned. Closest: scheduler (cmd/sched). Extend one, or add a concept to .arch/registry.yaml with a reason.
+zzz/x.go: unowned. No close concept. Add a concept to .arch/registry.yaml with a reason.

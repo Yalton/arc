@@ -1,0 +1,57 @@
+version: 1
+system:
+  name: demo
+  summary: Demo system.
+non_goals:
+  - id: no-web-ui
+    text: No browser UI.
+    keywords: [web ui, dashboard]
+ignore:
+  - "**/*_test.go"
+  - "docs/**"
+concepts:
+  - id: goal
+    name: Goal
+    summary: Operator goals.
+    paths: ["internal/workgraph/**"]
+    storage: [work_nodes]
+    env: [WORKGRAPH_DB_URL]
+    aliases: [goal, objective]
+    reason: Goals were scattered; one owner keeps them consistent.
+    rules: [Goals are work_nodes with kind=goal.]
+  - id: scheduler
+    name: Scheduler
+    summary: Runs work.
+    paths: ["internal/scheduler/**", "internal/queue/**"]
+  - id: store
+    name: Store
+    summary: Persistence.
+    paths: ["internal/store/**"]
+  - id: api
+    name: API
+    summary: HTTP API.
+    paths: ["internal/api/**"]
+boundaries:
+  - id: writes-through-actions
+    from: ["internal/api/**"]
+    deny: ["internal/store/**"]
+    reason: All writes go through actions.
+flags:
+  - name: USE_NEW_SCHEDULER
+    concept: scheduler
+    purpose: Gate v2 scheduler.
+    expires: 2026-12-01
+    bead: vap-123
+removals:
+  - id: old-queue
+    what: internal/queue
+    paths: ["internal/queue/**", "internal/gone/**"]
+    replaced_by: scheduler
+    remove_by: 2026-11-15
+limits:
+  file_lines: 1000
+  function_lines: 150
+checks:
+  - id: deadcode
+    command: ["deadcode", "./..."]
+    baseline: true

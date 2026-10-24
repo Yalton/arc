@@ -1,0 +1,12 @@
+System: vapula: Runs operator goals as scheduled agent work.
+Non-goals:
+- no-web-ui: No browser UI; operators use the CLI and Gitea.
+Concept scheduler (Scheduler): Decides when queued work runs.
+  env: SCHED_TICK
+  - One scheduler loop per process.
+Boundaries:
+- scheduler-no-api: internal/scheduler/** must not import internal/api/**. The scheduler is headless.
+Flags:
+- USE_NEW_SCHEDULER (scheduler, expires 2026-12-01, vap-123): Gate the v2 scheduler during rollout.
+Removals:
+- old-queue: internal/queue (v1 job queue) (replaced by scheduler, remove by 2026-11-15, vap-130)

@@ -1,0 +1,10 @@
+{
+  "session_id": "sess-1",
+  "transcript_path": "/home/user/.claude/projects/x/sess-1.jsonl",
+  "cwd": "{{ROOT}}",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": {"file_path": "{{ROOT}}/internal/foo/x.go", "content": "package foo\n"},
+  "tool_use_id": "toolu_01"
+}

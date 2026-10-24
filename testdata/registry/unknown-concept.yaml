@@ -1,0 +1,13 @@
+version: 1
+concepts:
+  - id: goal
+    paths: ["internal/workgraph/**"]
+flags:
+  - name: USE_X
+    concept: nope
+    expires: 2026-12-01
+removals:
+  - id: old
+    paths: ["internal/queue/**"]
+    replaced_by: missing
+    remove_by: 2026-11-15

@@ -1,0 +1,5 @@
+{
+  "name": "arc",
+  "description": "Keeps agent-built code inside its architecture: denies writes to unowned new files and adds the owning concept's brief as context. Requires the arc binary on PATH.",
+  "version": "0.1.0"
+}

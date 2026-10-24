@@ -1,0 +1,6 @@
+version: 1
+concepts:
+  - id: goal
+    paths: ["internal/workgraph/**"]
+  - id: goal
+    paths: ["internal/api/**"]

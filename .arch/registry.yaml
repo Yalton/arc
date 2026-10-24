@@ -1,0 +1,112 @@
+# arc architecture registry (SPEC.md, "Registry schema").
+# Source of truth for concepts, boundaries, flags and removals. After editing,
+# run 'arc validate' and 'arc render'.
+version: 1
+
+system:
+  name: arc
+  summary: |
+    Deterministic Go CLI that keeps agent-built codebases inside their
+    architecture: a per-repo registry, placement and brief lookups, a gate for
+    pre-commit and CI, and thin harness hook adapters. It never calls an LLM.
+
+non_goals:
+  - id: no-model-calls
+    text: arc never invokes an LLM or agent CLI; judgment is left to the caller.
+    keywords: [llm, model call, openai, anthropic api, agent cli]
+  - id: no-server
+    text: No daemon, server or web UI; arc is one static binary.
+    keywords: [daemon, server, web ui, dashboard]
+  - id: no-custom-analysis
+    text: No custom dead-code or call-graph analysis; external tools are wrapped.
+    keywords: [call graph, dead code analysis]
+
+ignore:
+  - "**/*_test.go"
+  - "testdata/**"
+  - "*.md"
+  - ".arch/**"
+  - ".beads/**"
+  - ".claude/**"
+  - ".codex/**"
+  - ".cursor/**"
+  - ".agents/**"
+  - ".serena/**"
+  - ".forgejo/**"
+  - ".gitignore"
+  - "go.mod"
+  - "go.sum"
+  - "Makefile"
+
+concepts:
+  - id: cli
+    name: CLI
+    summary: Command-line entry point; flag parsing, dispatch, text and --json output, exit codes.
+    paths: ["cmd/arc/**"]
+    aliases: [command, flag, output, exit code]
+    reason: One place for argument parsing and output so behaviour stays testable in internal packages.
+    rules:
+      - Only parsing and presentation here; behaviour lives in internal packages.
+      - Every command supports --json; exit 0 ok, 1 violations, 2 usage or config error.
+
+  - id: registry
+    name: Registry
+    summary: Schema, load, validation, glob ownership and rendering of .arch/registry.yaml.
+    paths: ["internal/registry/**"]
+    aliases: [schema, ownership, render, validate]
+    reason: The registry is the single source of truth; every command reads it through one loader and validator.
+    rules:
+      - Unknown YAML keys are errors.
+      - Ownership overlap is a validation error; no most-specific-glob wins.
+      - Never touch text outside the arc markers.
+
+  - id: gitx
+    name: Git access
+    summary: Repository root, file lists and change sets, by shelling out to git.
+    paths: ["internal/gitx/**"]
+    aliases: [git, diff, staged, changeset]
+    reason: All git access in one place, shelling out instead of a git library (SPEC principle 5).
+    rules:
+      - Shell out to git; no git library.
+
+  - id: gate
+    name: Gate
+    summary: Deterministic checks over a change set for pre-commit and CI, one file per check.
+    paths: ["internal/gate/**"]
+    aliases: [check, placement, structure, size, flags, removals]
+    reason: The enforcement point for pre-commit and CI; checks share one change-set model.
+    rules:
+      - Judge only the change set unless --all; pre-existing problems in untouched files pass.
+      - Every finding names the registry entry and the fix.
+
+  - id: brief
+    name: Brief and place
+    summary: Owning-concept lookup with closest-concept suggestions, and compact agent-facing briefs.
+    paths: ["internal/brief/**"]
+    aliases: [place, suggestion, context]
+    reason: Agents need small, targeted context at the moment they edit; place and brief share ownership lookup.
+    rules:
+      - Keep a one-concept brief under 1,500 tokens and the whole registry under 4,000.
+
+  - id: initcmd
+    name: Init
+    summary: arc init — registry skeleton, --scan drafts, render, pre-commit hook and harness setup.
+    paths: ["internal/initcmd/**"]
+    aliases: [init, scaffold, scan, pre-commit]
+    reason: Adoption must be one idempotent command that never destroys existing files or hooks.
+    rules:
+      - Idempotent; never overwrite an existing registry; chain existing hooks.
+
+  - id: hook
+    name: Harness hooks
+    summary: Harness-agnostic hook decisions plus per-harness payload adapters.
+    paths: ["internal/hook/**", "adapters/**"]
+    aliases: [harness, claude, codex, opencode, adapter]
+    reason: Harness integrations stay thin adapters over shared decisions (SPEC principle 2).
+    rules:
+      - Any internal error allows the action with a warning; a broken arc never blocks an agent.
+      - Payload formats are pinned by fixtures under testdata/hooks.
+
+limits:
+  file_lines: 1000
+  function_lines: 150
