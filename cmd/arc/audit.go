@@ -9,13 +9,15 @@ import (
 	"arc/internal/beads"
 )
 
-// runAudit prints the deterministic drift report (SPEC.md, "arc audit").
-// Findings are information, not failures: it exits 0 unless arguments,
-// the registry or git fail.
+// runAudit prints the deterministic drift report (SPEC.md, "arc audit"),
+// or with --prompt the architect prompt around it. Findings are
+// information, not failures: it exits 0 unless arguments, the registry or
+// git fail.
 func runAudit(out *output, args []string) int {
 	fs := flag.NewFlagSet("audit", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	since := fs.String("since", audit.DefaultSince, "history window: <N>d or <N>w")
+	prompt := fs.Bool("prompt", false, "print the architect prompt with the report embedded")
 	if err := fs.Parse(args); err != nil {
 		return out.fail(exitUsage, "audit: "+err.Error())
 	}
@@ -29,7 +31,8 @@ func runAudit(out *output, args []string) int {
 	if err != nil {
 		return out.fail(exitUsage, err.Error())
 	}
-	opts := audit.Options{Root: r.root, Reg: r.reg, Files: r.files, Now: time.Now().UTC(), Since: *since}
+	now := time.Now().UTC()
+	opts := audit.Options{Root: r.root, Reg: r.reg, Files: r.files, Now: now, Since: *since}
 	if removalBeads(r) {
 		c, notice := beads.Open(r.root)
 		opts.BeadsNotice = notice
@@ -43,6 +46,12 @@ func runAudit(out *output, args []string) int {
 	rep, err := audit.Build(opts)
 	if err != nil {
 		return out.fail(exitUsage, "audit: "+err.Error())
+	}
+	if *prompt {
+		// arc never runs a model (SPEC.md, Principle 1); the caller does.
+		text := audit.Prompt(rep, r.reg, now)
+		out.result(text, map[string]string{"prompt": text})
+		return exitOK
 	}
 	out.result(rep.Text(), rep)
 	return exitOK

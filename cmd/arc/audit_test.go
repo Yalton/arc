@@ -83,3 +83,22 @@ func TestAuditWithoutBeadsIsNotice(t *testing.T) {
 		t.Fatalf("code %d out:\n%s", code, out)
 	}
 }
+
+func TestAuditPrompt(t *testing.T) {
+	auditRepo(t)
+	code, out, errOut := runArc("audit", "--prompt")
+	if code != exitOK {
+		t.Fatalf("code %d stderr %q", code, errOut)
+	}
+	for _, want := range []string{"You are the architect for demo.", "## Drift report", "Overdue removals: 1",
+		"## Registry brief", "Concept goal (Goal)", "arch:consolidation"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("prompt missing %q:\n%s", want, out)
+		}
+	}
+	code, out, _ = runArc("audit", "--prompt", "--json")
+	var v struct{ Prompt string }
+	if code != exitOK || json.Unmarshal([]byte(out), &v) != nil || !strings.HasPrefix(v.Prompt, "You are the architect") {
+		t.Fatalf("json: code %d out %q", code, out)
+	}
+}

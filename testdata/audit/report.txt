@@ -1,0 +1,31 @@
+arc audit: 2026-01-08T12:00:00Z to 2026-01-15T12:00:00Z (since 7d; base 0123456789ab)
+
+Non-test LOC per concept (window start -> now):
+  alpha    120 ->    180  (+60)
+  beta       0 ->     40  (+40)
+
+History: 6 commit(s), +300 -120 lines; fix: 2, feat: 4 (fix/feat 0.50)
+
+Hotspots (files by fix commits):
+    2  internal/a/a.go
+
+Unowned files: 1
+  other/x.go
+
+Draft concepts: 1
+  beta
+
+Concepts owning several tables: 1
+  beta: t1, t2
+
+Expired flags: 1
+  OLD_FLAG (alpha) expired 2026-01-10 [bead t-9]
+
+Overdue removals: 1
+  old-a (legacy a) due 2026-01-14, replaced by alpha [bead t-1]
+
+Removals whose bead is closed but paths remain: none
+
+External checks:
+  checks.lint: 2 finding(s), 1 baselined, 1 new
+    y.go:2: worse
