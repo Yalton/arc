@@ -147,7 +147,7 @@ Validation rules (`arc validate`, also run by `gate`):
 All commands accept `--json`. Exit codes: `0` ok, `1` violations found, `2`
 usage, configuration or environment error (including a failed `bd` call).
 
-### `arc init [--scan] [--claude] [--codex] [--opencode] [--ci github|gitea]`
+### `arc init [--scan] [--claude] [--codex] [--opencode] [--ci github|gitea|none] [--no-detect]`
 
 Creates `.arch/registry.yaml` (skeleton), `.arch/.gitignore` for `cache/`,
 the rendered block in `ARCHITECTURE.md`, the instruction snippet in
@@ -159,6 +159,29 @@ marker sections (e.g. beads) coexist. If the existing hook ends in an
 unconditional `exec` or `exit`, the block could never run; arc then moves
 the hook to `pre-commit.local` and installs a hook that runs it first.
 Harness flags install the matching adapter. Idempotent.
+
+Plain `arc init` sets up everything that applies: each of `--claude`,
+`--codex`, `--opencode`, `--ci` and `--scan` that is not given on the command
+line is detected, reading only the repository, `PATH` and git config:
+
+- a harness when its project directory (`.claude/`, `.codex/`, `.opencode/`)
+  exists or its CLI (`claude`, `codex`, `opencode`) is on `PATH`;
+- the CI provider from the host of `git remote get-url origin`: `github.com`
+  is `github`; GitLab (`gitlab.com`, `gitlab.*`) and `bitbucket.org` get no
+  workflow; any other host is `gitea` (Gitea or Forgejo); no origin or a
+  local path gets none;
+- `--scan` only when init creates the registry and the repository has a file
+  neither the skeleton's ignore list nor the built-in ignores cover.
+
+Init prints one line per item before what it created, e.g. `detected claude:
+.claude/ exists`, `not detected codex: no .codex/ and codex not on PATH`,
+`flag ci: none (--ci none)`; `--json` lists them under `detected`. Only the
+remote's host is printed, never its URL. A flag given explicitly wins over
+detection for that item: `--claude=false` (likewise `--codex`, `--opencode`,
+`--scan`) and `--ci none` opt out of one item, and `--no-detect` turns
+detection off so only the given flags apply. When the
+CI provider was detected rather than requested, an existing workflow file
+without arc's marker is left alone with a notice instead of failing init.
 
 `--ci github|gitea` writes `.github/workflows/arc.yml` or
 `.gitea/workflows/arc.yml` (Forgejo reads `.gitea/` too): `arc gate --base
