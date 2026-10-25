@@ -18,7 +18,7 @@ func TestInitCI(t *testing.T) {
 	t.Chdir(root)
 
 	code, out, errOut := runArc("init", "--ci", "github")
-	if code != exitOK || !strings.Contains(out, "created .github/workflows/arc.yml") || !strings.Contains(out, "ARC_REPO") {
+	if code != exitOK || !strings.Contains(out, "created .github/workflows/arc.yml") || !strings.Contains(out, "arc@latest") {
 		t.Fatalf("init --ci github: code %d\nout %s\nerr %s", code, out, errOut)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".github", "workflows", "arc.yml")); err != nil {

@@ -13,7 +13,15 @@ import (
 
 var update = flag.Bool("update", false, "rewrite golden files in testdata/ci")
 
+// pinVersion makes the workflow pin v for the rest of the test.
+func pinVersion(t *testing.T, v string) {
+	old := ArcVersion
+	ArcVersion = v
+	t.Cleanup(func() { ArcVersion = old })
+}
+
 func TestCIWorkflowGolden(t *testing.T) {
+	pinVersion(t, "v1.2.3")
 	for provider, rel := range ciPaths {
 		t.Run(provider, func(t *testing.T) {
 			root := newRepo(t, "main.go")
@@ -45,8 +53,34 @@ func TestCIWorkflowGolden(t *testing.T) {
 			if err := yaml.Unmarshal(got, &parsed); err != nil || parsed["jobs"] == nil {
 				t.Fatalf("workflow is not valid YAML: %v", err)
 			}
-			if !anyContains(res.Notices, "ARC_REPO") || !anyContains(res.Notices, "guess") {
+			if !anyContains(res.Notices, "guess") || anyContains(res.Notices, "latest") {
 				t.Errorf("notices = %v", res.Notices)
+			}
+		})
+	}
+}
+
+func TestCIInstallVersion(t *testing.T) {
+	for _, c := range []struct{ arc, want string }{
+		{"v1.2.3", "@v1.2.3"},
+		{"v2.0.0-rc.1", "@v2.0.0-rc.1"},
+		{"dev", "@latest"},
+		{"v0.0.0-20261024120000-abcdef123456", "@latest"},
+		{"v1.2.3+dirty", "@latest"},
+	} {
+		t.Run(c.arc, func(t *testing.T) {
+			pinVersion(t, c.arc)
+			root := newRepo(t, "main.go")
+			res, err := Run(root, Options{CI: "github"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, _ := os.ReadFile(filepath.Join(root, ".github", "workflows", "arc.yml"))
+			if !strings.Contains(string(data), "run: go install "+ciModule+c.want+"\n") {
+				t.Fatalf("workflow does not install %s:\n%s", c.want, data)
+			}
+			if latest := c.want == "@latest"; anyContains(res.Notices, "arc@latest") != latest {
+				t.Errorf("latest notice = %v, want %v: %v", !latest, latest, res.Notices)
 			}
 		})
 	}

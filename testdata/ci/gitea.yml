@@ -1,10 +1,8 @@
 # Managed by 'arc init --ci gitea'; rerunning it overwrites this file.
 # Delete the line above to take ownership of the file.
 #
-# arc cannot be 'go install'ed, so this workflow builds it from source. Set
-# repository variables (Settings > Actions > Variables):
-#   ARC_REPO  git URL of arc's source repository (required)
-#   ARC_REF   branch or tag to build (optional, default main)
+# Installs the arc that wrote this file; rerun 'arc init --ci gitea' after
+# upgrading arc to move the pin.
 name: arc
 on:
   push:
@@ -14,9 +12,6 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    env:
-      ARC_REPO: ${{ vars.ARC_REPO }}
-      ARC_REF: ${{ vars.ARC_REF || 'main' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,14 +21,7 @@ jobs:
           go-version: stable
           cache: false
       - name: Install arc
-        run: |
-          if [ -z "$ARC_REPO" ]; then
-            echo "::error::set the ARC_REPO repository variable to arc's git URL"
-            exit 1
-          fi
-          git clone -q --depth 1 --branch "$ARC_REF" "$ARC_REPO" "$RUNNER_TEMP/arc-src"
-          (cd "$RUNNER_TEMP/arc-src" && go build -o "$RUNNER_TEMP/arc-bin/arc" ./cmd/arc)
-          echo "$RUNNER_TEMP/arc-bin" >> "$GITHUB_PATH"
+        run: go install github.com/Yalton/arc/cmd/arc@v1.2.3
       - name: arc gate (pull request)
         if: github.event_name == 'pull_request'
         env:

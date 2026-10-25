@@ -8,6 +8,8 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+
+	"github.com/Yalton/arc/internal/initcmd"
 )
 
 // version is set at build time with -ldflags "-X main.version=..."; when
@@ -41,6 +43,7 @@ func main() {
 // run executes arc with args and returns the process exit code.
 func run(args []string, stdout, stderr io.Writer) int {
 	out := &output{stdout: stdout, stderr: stderr}
+	initcmd.ArcVersion = arcVersion()
 	args, out.json = extractJSONFlag(args)
 
 	if len(args) == 0 {
