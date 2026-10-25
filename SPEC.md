@@ -42,7 +42,7 @@ Background and rationale: `../AGENT_ARCHITECTURE_GUARDRAILS.md`.
 |---|---|---|
 | CI | `arc gate --base origin/main` | Every agent and human; authoritative |
 | Pre-commit | `arc gate --staged` (installed by `arc init`) | Every local committer |
-| Harness pre-write hook | `arc hook claude\|codex\|opencode` | Agents in supported harnesses; earliest feedback |
+| Harness hooks (before writes, after shell commands) | `arc hook claude\|codex\|opencode` | Agents in supported harnesses; earliest feedback |
 | Instructions | Snippet in `AGENTS.md` / `CLAUDE.md` | Everything that reads instructions |
 
 A harness without hooks loses only early feedback, not enforcement.
@@ -162,7 +162,15 @@ refreshes that block in place on rerun, so tools that manage their own
 marker sections (e.g. beads) coexist. If the existing hook ends in an
 unconditional `exec` or `exit`, the block could never run; arc then moves
 the hook to `pre-commit.local` and installs a hook that runs it first.
-Harness flags install the matching adapter. Idempotent.
+Harness flags install the matching adapter: for Claude Code,
+`.claude/settings.json` entries running `arc hook claude` on `PreToolUse`
+(matcher `Write|Edit|MultiEdit|NotebookEdit`) and `PostToolUse` (matcher
+`Bash`); for Codex, `.codex/hooks.json` entries running `arc hook codex` on
+`PreToolUse` (`^apply_patch$`) and `PostToolUse` (`^Bash$`); for opencode,
+the plugin shim, which forwards file-writing tools before they run and
+shell tools after. Hook files are merged per event: an event that already
+runs arc's command is left alone and a missing one is added, so rerunning
+init on an older install adds the shell post-hook. Idempotent.
 
 Plain `arc init` sets up everything that applies: each of `--claude`,
 `--codex`, `--opencode`, `--ci`, `--scan`, `--beads`, `--dupl` and `--jscpd` that is not given on the command
@@ -382,6 +390,35 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
   in `.arch/cache/`). Creating a new file in an owned concept that was
   already briefed this session attaches that concept's provides again
   (a new file is where duplication starts).
+- **After any shell command:** find the files it changed, with one
+  `git --no-optional-locks status --porcelain=v1 -z --untracked-files=all
+  --no-renames` call compared with the session's snapshot of dirty paths
+  (porcelain code, modification time and size per path, kept in the same
+  `.arch/cache/` state file as the briefed concepts). A dirty path whose
+  signature differs from the snapshot counts as changed; on the session's
+  first shell command, when there is no snapshot yet, only paths modified
+  in the last 10 minutes count, so files that were dirty before the session
+  are not blamed on it. Deleted paths and non-regular files are skipped.
+  Of the changed files:
+  - a new file (untracked or added to the index) that no concept owns gets
+    feedback listing the `place` message of each (at most 10, then a count):
+    move it into an existing concept's paths or register an owner. The
+    command already ran, so this cannot deny; Claude Code gets it as the
+    `PostToolUse` `{"decision": "block", "reason": ...}` feedback (the
+    command's output is kept); Codex and opencode get it as added context,
+    because Codex's `PostToolUse` block replaces the command's output with
+    the reason and opencode's `execute.after` has no feedback channel. A
+    pre-existing unowned file the command only modified is allowed, as
+    before a write;
+  - owned files get the same added context as a write: the brief of each
+    concept not briefed this session, and a concept's provides again for a
+    new file in an already briefed concept.
+
+  Each new file is announced once per session, whether by a write hook or a
+  shell hook. Claude Code runs `PostToolUse` only for tools
+  that succeed and the opencode shim forwards only completed calls; files
+  a failed command wrote are reported after the next command. Without a session id nothing persists, so every shell command
+  is judged as a first one.
 - **After a shell command that ran `bd create`:** run `triage` on the new
   bead and return its result as added context. `bd create` must be a
   command (start of the line or after an unquoted `;`, `&`, `|`, newline or

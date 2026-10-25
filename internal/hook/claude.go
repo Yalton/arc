@@ -3,10 +3,15 @@ package hook
 import (
 	"encoding/json"
 	"io"
+	"strings"
 	"time"
 )
 
 // Claude Code hook payloads (PreToolUse / PostToolUse command hooks).
+// Post-shell feedback uses PostToolUse's top-level {"decision": "block",
+// "reason": ...}: the command already ran and its output is kept; the
+// reason is shown to the model (code.claude.com/docs/en/hooks, "Decision
+// control"). additionalContext may sit beside it in the same object.
 // Only the fields arc reads are declared.
 type claudePayload struct {
 	SessionID     string          `json:"session_id"`
@@ -28,7 +33,12 @@ type claudeToolInput struct {
 	Command      string `json:"command"`       // Bash
 }
 
+// claudeResponse is a hook's stdout. Decision "block" with Reason is the
+// PostToolUse feedback channel: the tool already ran, and Claude Code
+// shows Reason to the model (alongside the tool result) so it can act.
 type claudeResponse struct {
+	Decision           string            `json:"decision,omitempty"`
+	Reason             string            `json:"reason,omitempty"`
 	HookSpecificOutput *claudeHookOutput `json:"hookSpecificOutput,omitempty"`
 	SystemMessage      string            `json:"systemMessage,omitempty"`
 }
@@ -93,16 +103,39 @@ func Claude(stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
 	if d.Warning != "" {
 		io.WriteString(stderr, d.Warning+"\n")
 	}
+	var resp claudeResponse
 	out := &claudeHookOutput{HookEventName: event}
 	switch {
 	case d.Deny:
 		out.PermissionDecision = "deny"
 		out.PermissionDecisionReason = d.Reason
+		resp.HookSpecificOutput = out
 	case d.Context != "":
 		out.AdditionalContext = d.Context
-	default:
+		resp.HookSpecificOutput = out
+	}
+	if d.Feedback != "" {
+		if event == "PostToolUse" {
+			resp.Decision, resp.Reason = "block", d.Feedback
+		} else { // not produced today; never lose it
+			out.AdditionalContext = joinContext(d.Feedback, out.AdditionalContext)
+			resp.HookSpecificOutput = out
+		}
+	}
+	if resp == (claudeResponse{}) {
 		return 0 // allow without output; the normal permission flow applies
 	}
-	json.NewEncoder(stdout).Encode(claudeResponse{HookSpecificOutput: out})
+	json.NewEncoder(stdout).Encode(resp)
 	return 0
+}
+
+// joinContext joins non-empty context texts with a blank line.
+func joinContext(texts ...string) string {
+	var parts []string
+	for _, t := range texts {
+		if t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }

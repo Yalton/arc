@@ -100,3 +100,12 @@ func TestOpencodeDenyOnlyBefore(t *testing.T) {
 		t.Fatalf("got %q", out.String())
 	}
 }
+
+func TestOpencodePostShellWriteFeedback(t *testing.T) {
+	root := newRepo(t)
+	write(t, root, "internal/foo/x.go", "package foo\n")
+	r, _, stderr := opencodeRun(t, root, "post-shell-write.json")
+	if r.Action != "allow" || !strings.Contains(r.Context, "internal/foo/x.go: unowned") {
+		t.Fatalf("got %+v stderr %q", r, stderr)
+	}
+}

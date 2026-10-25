@@ -32,8 +32,14 @@ package hook
 //     the reason. Outputs such as permissionDecision "ask"/"allow" without
 //     updatedInput, continue:false or suppressOutput are unsupported: the
 //     hook run is marked failed and the tool proceeds.
+//   - PostToolUse also accepts {"decision":"block","reason":"..."}, but
+//     Codex then replaces the tool result with the reason, so the model
+//     loses the command's output; arc sends post-shell feedback as
+//     additionalContext instead.
 //   - Hooks are a guardrail, not an enforcement boundary: a file written
-//     by a shell command (echo > f) is not seen as a write.
+//     by a shell command (echo > f) is not seen as a write before it
+//     happens; arc's PostToolUse Bash hook reports it afterwards from
+//     'git status' (SPEC.md, "arc hook").
 
 import (
 	"encoding/json"
@@ -128,12 +134,15 @@ func Codex(stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
 		io.WriteString(stderr, d.Warning+"\n")
 	}
 	out := &claudeHookOutput{HookEventName: event} // Codex uses the same shape
+	// Feedback goes in as context: Codex's PostToolUse decision "block"
+	// would replace the command's output with it.
+	ctx := joinContext(d.Feedback, d.Context)
 	switch {
 	case d.Deny && event == "PreToolUse":
 		out.PermissionDecision = "deny"
 		out.PermissionDecisionReason = d.Reason
-	case d.Context != "":
-		out.AdditionalContext = d.Context
+	case ctx != "":
+		out.AdditionalContext = ctx
 	default:
 		return 0
 	}

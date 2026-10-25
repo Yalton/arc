@@ -125,3 +125,32 @@ func MergeBase(root, ref string) (string, error) {
 	out, err := run(root, nil, "merge-base", ref, "HEAD")
 	return strings.TrimSpace(string(out)), err
 }
+
+// DirtyPath is one 'git status' entry: a repo-relative, slash-separated
+// path and its two-letter porcelain code ("??" untracked, "A " added,
+// " M" modified, ...).
+type DirtyPath struct {
+	Path string
+	Code string
+}
+
+// WorktreeStatus lists every path that differs from HEAD in the index or
+// the working tree, untracked files included one by one and ignored files
+// left out, with renames reported as an add plus a delete. It is one
+// 'git status --porcelain -z' call and takes no optional locks, so it is
+// safe to run while an agent's own git commands are in flight.
+func WorktreeStatus(root string) ([]DirtyPath, error) {
+	out, err := run(root, nil, "--no-optional-locks", "status", "--porcelain=v1", "-z",
+		"--untracked-files=all", "--no-renames", "--ignore-submodules=all")
+	if err != nil {
+		return nil, err
+	}
+	var paths []DirtyPath
+	for _, rec := range splitZ(out) {
+		if len(rec) < 4 || rec[2] != ' ' {
+			continue
+		}
+		paths = append(paths, DirtyPath{Path: rec[3:], Code: rec[:2]})
+	}
+	return paths, nil
+}

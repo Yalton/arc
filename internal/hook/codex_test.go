@@ -119,3 +119,16 @@ func mustJSON(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
 }
+
+// Codex gets post-shell feedback as additionalContext: its decision "block"
+// would replace the command's output.
+func TestCodexPostBashWriteFeedback(t *testing.T) {
+	root := newRepo(t)
+	write(t, root, "internal/foo/x.go", "package foo\n")
+	resp, raw, stderr := codexRun(t, root, "post-bash-write.json")
+	h := resp.HookSpecificOutput
+	if strings.Contains(raw, `"decision"`) || h == nil || h.HookEventName != "PostToolUse" ||
+		!strings.Contains(h.AdditionalContext, "internal/foo/x.go: unowned") {
+		t.Fatalf("got %s stderr %q", raw, stderr)
+	}
+}

@@ -82,3 +82,23 @@ func TestClaudeEventPostBashOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A file written through Bash is reported after the command: an unowned new
+// file as PostToolUse decision feedback, an owned change as the brief.
+func TestClaudePostBashWriteFeedback(t *testing.T) {
+	root := newRepo(t)
+	write(t, root, "internal/foo/x.go", "package foo\n")
+	write(t, root, "internal/goal/goal.go", "package goal\n\nvar X = 1\n")
+	resp, _, stderr := claudeRun(t, root, "post-bash-write.json")
+	if resp.Decision != "block" || !strings.Contains(resp.Reason, "internal/foo/x.go: unowned") || stderr != "" {
+		t.Fatalf("got %+v stderr %q", resp, stderr)
+	}
+	h := resp.HookSpecificOutput
+	if h == nil || h.HookEventName != "PostToolUse" || h.PermissionDecision != "" ||
+		!strings.Contains(h.AdditionalContext, "Goals are work nodes.") {
+		t.Fatalf("hookSpecificOutput %+v", h)
+	}
+	if _, raw, _ := claudeRun(t, root, "post-bash-write.json"); raw != "" {
+		t.Fatalf("nothing changed since: want silence, got %q", raw)
+	}
+}

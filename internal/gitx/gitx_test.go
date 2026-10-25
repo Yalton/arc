@@ -329,3 +329,33 @@ func TestWorkingChangeSet(t *testing.T) {
 		t.Errorf("new.go added = %+v", l)
 	}
 }
+
+func TestWorktreeStatus(t *testing.T) {
+	root := newRepo(t)
+	write(t, root, "keep.go", "a\n")
+	write(t, root, "edit.go", "a\n")
+	write(t, root, "gone.go", "a\n")
+	write(t, root, "move.go", "a\n")
+	write(t, root, ".gitignore", "*.log\n")
+	commitAll(t, root, "init")
+	write(t, root, "edit.go", "b\n")
+	os.Remove(filepath.Join(root, "gone.go"))
+	git(t, root, "mv", "move.go", "moved.go")
+	write(t, root, "new dir/ü x.go", "a\n") // untracked, listed per file, unquoted
+	write(t, root, "staged.go", "a\n")
+	git(t, root, "add", "staged.go")
+	write(t, root, "debug.log", "x\n") // ignored
+	got, err := WorktreeStatus(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"edit.go": " M", "gone.go": " D", "move.go": "D ", "moved.go": "A ",
+		"new dir/ü x.go": "??", "staged.go": "A "}
+	m := map[string]string{}
+	for _, e := range got {
+		m[e.Path] = e.Code
+	}
+	if !reflect.DeepEqual(m, want) {
+		t.Fatalf("got %v want %v", m, want)
+	}
+}

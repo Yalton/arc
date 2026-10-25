@@ -36,7 +36,8 @@ package hook
 //     arc's context as a text part to event.result.content in execute.after,
 //     so the model reads it with the tool result.
 //   - Like other harnesses, a file written by a shell command is not seen
-//     as a write.
+//     as a write before it happens; the execute.after shell hook reports
+//     it afterwards, appended as context (there is no feedback channel).
 //
 // Shim <-> arc protocol (adapters/opencode/arc.js). The shim runs 'arc
 // hook opencode' with one JSON object on stdin:
@@ -164,11 +165,12 @@ func Opencode(stdin io.Reader, stdout, stderr io.Writer, now time.Time) int {
 		io.WriteString(stderr, d.Warning+"\n")
 	}
 	var r opencodeReply
+	ctx := joinContext(d.Feedback, d.Context) // execute.after can only add text
 	switch {
 	case d.Deny && hookName == "execute.before":
 		r = opencodeReply{Action: "deny", Reason: d.Reason}
-	case d.Context != "":
-		r = opencodeReply{Action: "allow", Context: d.Context}
+	case ctx != "":
+		r = opencodeReply{Action: "allow", Context: ctx}
 	default:
 		return 0
 	}
