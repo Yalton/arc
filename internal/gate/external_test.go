@@ -49,7 +49,7 @@ func TestExternalBaselineFiltersAcceptedAcrossLineShifts(t *testing.T) {
 	r := externalRepo(t, fakeTool(t), true)
 	r.write("out", "a/x.go:3:1: unused func Old\n")
 	k := r.registryCheck()
-	res, err := RecordBaseline(r.root, k)
+	res, err := RecordBaseline(r.root, nil, k)
 	if err != nil || res.Findings != 1 || res.Added != 1 || res.Removed != 0 {
 		t.Fatalf("record: %+v %v", res, err)
 	}
@@ -68,7 +68,7 @@ func TestExternalBaselineFiltersAcceptedAcrossLineShifts(t *testing.T) {
 
 	// Re-recording reports the change in counts.
 	r.write("out", "a/y.go:2:1: unused func New\n")
-	if res, err = RecordBaseline(r.root, k); err != nil || res.Added != 1 || res.Removed != 1 || res.Findings != 1 {
+	if res, err = RecordBaseline(r.root, nil, k); err != nil || res.Added != 1 || res.Removed != 1 || res.Findings != 1 {
 		t.Fatalf("re-record: %+v %v", res, err)
 	}
 	if rep := r.gate("all", "checks.lint"); rep.Errors != 0 {
@@ -80,7 +80,7 @@ func TestExternalBaselineIsMultiset(t *testing.T) {
 	r := externalRepo(t, fakeTool(t), true)
 	r.write("out", "a/x.go:3:1: unused func Old\nb.go:1: dup\nb.go:5: dup\n")
 	k := r.registryCheck()
-	res, err := RecordBaseline(r.root, k)
+	res, err := RecordBaseline(r.root, nil, k)
 	if err != nil || res.Findings != 3 || res.Added != 3 ||
 		strings.Join(res.AddedSample, "|") != "a/x.go: unused func Old|b.go: dup|b.go: dup" {
 		t.Fatalf("record: %+v %v", res, err)
@@ -101,7 +101,7 @@ func TestExternalBaselineIsMultiset(t *testing.T) {
 		t.Fatalf("got:\n%s", findings(rep))
 	}
 	// Re-recording counts copies.
-	if res, err = RecordBaseline(r.root, k); err != nil || res.Findings != 5 || res.Added != 2 || res.Removed != 0 {
+	if res, err = RecordBaseline(r.root, nil, k); err != nil || res.Findings != 5 || res.Added != 2 || res.Removed != 0 {
 		t.Fatalf("re-record: %+v %v", res, err)
 	}
 }
@@ -157,11 +157,16 @@ func TestBaselinePathRejectsUnsafeIDs(t *testing.T) {
 
 func (r *testRepo) registryCheck() registry.Check {
 	r.t.Helper()
+	return r.reg().Checks[0]
+}
+
+func (r *testRepo) reg() *registry.Registry {
+	r.t.Helper()
 	reg, err := registry.Load(r.root)
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	return reg.Checks[0]
+	return reg
 }
 
 func TestExternalTimeout(t *testing.T) {

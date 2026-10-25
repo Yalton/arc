@@ -53,12 +53,14 @@ calls a model.
   GitHub, `.gitea/workflows/arc.yml` for Gitea or Forgejo. It installs the same
   arc version with `go install` and needs no secrets.
   On pull requests, structural registry changes (a new concept, a loosened
-  boundary, a removed rule, a later deadline, wider concept paths) fail until
+  boundary, a removed rule, a later deadline, wider concept paths, a wider
+  ignore list, a raised size limit) fail until
   a maintainer adds the `arch-approved` label, so an agent cannot approve its
   own architecture change.
 - Duplicate-code checks when [dupl](https://github.com/mibk/dupl) (Go) or
   [jscpd](https://github.com/kucherenko/jscpd) is on `PATH`, with today's
   duplicates accepted as a baseline so only new copies fail the gate.
+  Clones involving test files or ignored files are not reported.
 
 Any item can be turned off or forced: `--claude=false`, `--codex=false`,
 `--opencode=false`, `--scan=false`, `--beads=false`, `--dupl=false`,

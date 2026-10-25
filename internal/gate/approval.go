@@ -18,7 +18,8 @@ const (
 // checkApproval reports structural registry changes an agent could make to
 // approve its own work: added or promoted concepts, removed or loosened
 // boundaries, removed rules, extended flag expiries and removal deadlines,
-// and widened concept paths. It runs only with --base (CI on pull
+// widened concept paths, a widened ignore list and raised or removed size
+// limits. It runs only with --base (CI on pull
 // requests), so local modes can still propose such changes, and only when
 // the base has a registry (adoption is not judged). Widening is judged on
 // the files in the tree: a pattern set widens when it now matches a file it
@@ -38,6 +39,7 @@ func checkApproval(ctx *Context) ([]Finding, error) {
 	a.concepts(ctx.BaseReg, ctx.Reg)
 	a.boundaries(ctx.BaseReg, ctx.Reg)
 	a.deadlines(ctx.BaseReg, ctx.Reg)
+	a.loosened(ctx.BaseReg, ctx.Reg)
 	return a.out, nil
 }
 
@@ -122,6 +124,29 @@ func (a *approval) deadlines(base, head *registry.Registry) {
 			}
 		}
 	}
+}
+
+// loosened reports an ignore list that now exempts a file it did not (an
+// ignored file escapes placement, size and structure) and size limits
+// raised or removed (0 means no limit).
+func (a *approval) loosened(base, head *registry.Registry) {
+	ignored := func(r *registry.Registry) []string {
+		return append(slices.Clone(registry.BuiltinIgnore), r.Ignore...)
+	}
+	if f, n := widened(a.files, ignored(base), ignored(head)); f != "" {
+		a.add("ignore", "ignore widened to exempt %s%s", f, more(n))
+	}
+	limit := func(key string, was, now int) {
+		switch {
+		case was <= 0 || now == was || (now > 0 && now < was):
+		case now <= 0:
+			a.add("limits."+key, "limit %s removed (was %d)", key, was)
+		default:
+			a.add("limits."+key, "limit %s raised from %d to %d", key, was, now)
+		}
+	}
+	limit("file_lines", base.Limits.FileLines, head.Limits.FileLines)
+	limit("function_lines", base.Limits.FunctionLines, head.Limits.FunctionLines)
 }
 
 func boundary(r *registry.Registry, id string) *registry.Boundary {

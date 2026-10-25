@@ -61,7 +61,7 @@ func ExternalCheck(reg *registry.Registry, id string) *registry.Check {
 // baseline file, so a new copy of an accepted finding still fails.
 func checkExternal(ctx *Context, k registry.Check) ([]Finding, error) {
 	entry := "checks[" + k.ID + "]"
-	lines, err := RunExternal(ctx.Root, k)
+	lines, err := RunExternal(ctx.Root, ctx.Reg, k)
 	if err != nil {
 		return []Finding{{Path: registry.Path, Entry: entry, Message: err.Error()}}, nil
 	}
@@ -116,10 +116,11 @@ func SplitBaselined(root string, k registry.Check, lines []string) (fresh []stri
 
 // RunExternal runs k's command (argv, no shell) in root and returns the
 // non-empty lines of its combined stdout and stderr (canonicalized for the
-// clone detectors, clones.go). The returned error is
+// clone detectors, dropping clones that touch a test or a file reg ignores,
+// clones.go; reg may be nil). The returned error is
 // a user-facing problem: command missing, timed out, or failed silently.
 // A non-zero exit with output is not an error; the output is the findings.
-func RunExternal(root string, k registry.Check) ([]string, error) {
+func RunExternal(root string, reg *registry.Registry, k registry.Check) ([]string, error) {
 	if len(k.Command) == 0 {
 		return nil, fmt.Errorf("check %s has no command. Set checks[%s].command in %s.", k.ID, k.ID, registry.Path)
 	}
@@ -154,7 +155,7 @@ func RunExternal(root string, k registry.Check) ([]string, error) {
 		return nil, fmt.Errorf("check %s failed: %v", k.ID, exitErr.ProcessState)
 	}
 	if IsCloneDetector(k.ID) {
-		lines = cloneLines(k.ID, lines)
+		lines = cloneLines(k.ID, lines, reg)
 	}
 	return lines, nil
 }
@@ -218,15 +219,15 @@ type BaselineResult struct {
 	AddedSample []string `json:"added_sample"` // up to BaselineSample added lines
 }
 
-// RecordBaseline runs k and writes its normalized findings, one line per
+// RecordBaseline runs k (with reg, see RunExternal) and writes its normalized findings, one line per
 // finding, sorted with duplicates kept, as the accepted baseline. Counts
 // compare the old and new files as multisets.
-func RecordBaseline(root string, k registry.Check) (*BaselineResult, error) {
+func RecordBaseline(root string, reg *registry.Registry, k registry.Check) (*BaselineResult, error) {
 	path, err := BaselinePath(k.ID)
 	if err != nil {
 		return nil, err
 	}
-	lines, err := RunExternal(root, k)
+	lines, err := RunExternal(root, reg, k)
 	if err != nil {
 		return nil, err
 	}

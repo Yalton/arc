@@ -311,8 +311,11 @@ changes: an added concept, or a draft promoted to a concept; a removed
 boundary, or one whose `deny` no longer covers a file it covered or whose
 `from` now covers a file it did not; a rule removed from a concept (also by
 removing the concept); a flag's `expires` or a removal's `remove_by` moved
-later; a concept whose `paths` now own a file they did not. Coverage is
-judged on the files in the head tree. The check runs only with `--base` and
+later; a concept whose `paths` now own a file they did not; an `ignore`
+list that now exempts a file it did not (built-in ignores count on both
+sides); a `limits` value (`file_lines`, `function_lines`) raised, or
+removed or set to 0 where the base had one (adding or lowering a limit is
+not listed). Coverage is judged on the files in the head tree. The check runs only with `--base` and
 only when the base has a registry (adoption is not judged); pre-commit,
 `--staged`, working and `--all` modes skip it, so local agents can still
 propose such changes. With `ARC_APPROVED=1` it is skipped with an info line,
@@ -336,7 +339,13 @@ of <path>:<start>-<end>` (dupl `-plumbing` prints it; jscpd's xcode
 reporter line `a.js:1:14: warning: Found 8 lines (1-9) duplicated on file
 b.js (1-9)` is rewritten to it, and its `Found N clones.` and `time:`
 summary lines are dropped). Formats verified with dupl (mibk/dupl, latest
-as of 2026-10) and jscpd 5.4.2; other lines are kept as they are.
+as of 2026-10) and jscpd 5.4.2; other lines are kept as they are. A clone
+with either side in a test file (Go `_test.go`, Python `test_*.py` and
+`*_test.py`, JS/TS `.test.*` and `.spec.*`, or under a `test`, `tests`,
+`testdata` or `__tests__` directory) or in a file the registry ignores is
+dropped, in the gate, `arc baseline` and `audit` alike: table-driven tests
+repeat by design. dupl reports a group of N copies as N pairs, so the pairs
+between non-test copies of a group still fail.
 
 Every failure message names the registry entry involved and the fix, e.g.
 `internal/foo/x.go: unowned. Closest: goal (internal/workgraph), shared.
