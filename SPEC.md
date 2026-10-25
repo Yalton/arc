@@ -216,12 +216,20 @@ Prints the agent-facing context for the given scope, sized to stay small
 (target under 1,500 tokens for one concept):
 
 - system summary (one line), relevant non-goals;
-- each owning concept: summary, rules, storage, env;
+- each owning concept: summary, rules, storage, env, and what it already
+  provides: the exported symbols of its non-ignored, non-test files (Go
+  exported funcs, types, consts, vars and methods as `Type.Method`; Python
+  top-level `def`/`class` not starting with `_`; TS/JS `export`ed
+  function, class, const/let/var, interface, type and enum), with the first
+  sentence of each doc comment or docstring. Text lists up to 25 names per
+  concept grouped by file, methods cut first, then `+N more`; `--json` has
+  every symbol with kind, doc, file and line;
 - boundaries whose `from` matches the paths;
 - active flags and pending removals touching those concepts.
 
 With no arguments, prints the whole registry in compact form (the
-"always-loaded" view, target under 4,000 tokens; warns if exceeded).
+"always-loaded" view, target under 4,000 tokens; warns if exceeded). It
+omits provides and ends with a line pointing to `arc brief <path>` for them.
 `--bead` resolves concepts from the bead's text via aliases and paths.
 
 ### `arc gate [--base <ref> | --staged | --all] [--only <check>...]`
@@ -278,7 +286,9 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
 - **Before a file write/edit:** if the target is unowned and new, deny with
   the `place` message. Otherwise allow and attach `brief <path>` as added
   context, once per concept per session (session id from the payload; state
-  in `.arch/cache/`).
+  in `.arch/cache/`). Creating a new file in an owned concept that was
+  already briefed this session attaches that concept's provides again
+  (a new file is where duplication starts).
 - **After a shell command that ran `bd create`:** run `triage` on the new
   bead and return its result as added context. `bd create` must be a
   command (start of the line or after an unquoted `;`, `&`, `|`, newline or
@@ -359,6 +369,7 @@ internal/gitx/      diff, staged set, history stats
 internal/gate/      one file per check
 internal/imports/   import extraction: go, python, ts/js
 internal/brief/     brief and place
+internal/symbols/   exported symbol extraction: go, python, ts/js
 internal/initcmd/   arc init: scaffold, --scan, hooks, adapters
 internal/hook/      harness payload adapters (claude, codex, opencode)
 internal/beads/     bd CLI wrapper

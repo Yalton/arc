@@ -12,6 +12,7 @@ import (
 	"github.com/Yalton/arc/internal/beads"
 	"github.com/Yalton/arc/internal/brief"
 	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/symbols"
 )
 
 // relPaths converts command-line paths (relative to the working directory
@@ -82,6 +83,7 @@ func runBrief(out *output, args []string) int {
 	}
 	now := time.Now().UTC()
 	var b brief.Brief
+	whole := false // the whole-registry view omits provides
 	switch {
 	case *bead != "":
 		ids, err := beadConcepts(r, *bead)
@@ -105,11 +107,18 @@ func runBrief(out *output, args []string) int {
 		}
 		b = brief.ForPaths(r.reg, paths, now)
 	default:
-		b = brief.Whole(r.reg, now)
+		b, whole = brief.Whole(r.reg, now), true
 		if n := b.Tokens(); n > brief.WholeTokenBudget {
 			fmt.Fprintf(out.stderr, "arc: warning: registry brief is ~%d tokens (budget %d); tighten summaries and rules\n",
 				n, brief.WholeTokenBudget)
 		}
+	}
+	if !whole {
+		by, err := symbols.ByConcept(r.reg, r.root, r.files, b.ConceptIDs())
+		if err != nil {
+			fmt.Fprintf(out.stderr, "arc: warning: reading symbols: %v\n", err)
+		}
+		b.AddProvides(by)
 	}
 	out.result(strings.TrimRight(b.Text(), "\n"), b)
 	return exitOK

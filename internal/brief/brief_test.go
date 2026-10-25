@@ -3,6 +3,7 @@ package brief
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Yalton/arc/internal/registry"
+	"github.com/Yalton/arc/internal/symbols"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files in testdata/brief")
@@ -154,5 +156,32 @@ func TestBriefUnknownConcept(t *testing.T) {
 	reg := loadFixture(t)
 	if _, err := ForConcepts(reg, []string{"goal", "nope"}, now); err == nil || !strings.Contains(err.Error(), `"nope"`) {
 		t.Errorf("err = %v, want unknown concept \"nope\"", err)
+	}
+}
+
+func TestBriefProvides(t *testing.T) {
+	reg := loadFixture(t)
+	b, err := ForConcepts(reg, []string{"scheduler"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var syms []symbols.Symbol
+	for i := 0; i < MaxProvides+2; i++ {
+		syms = append(syms, symbols.Symbol{Name: fmt.Sprintf("Run%02d", i), Kind: symbols.KindFunc, File: "internal/scheduler/run.go", Line: i + 1})
+	}
+	// Methods are cut before top-level names.
+	syms = append([]symbols.Symbol{{Name: "Job.Start", Kind: symbols.KindMethod, File: "internal/scheduler/a.go", Line: 1}}, syms...)
+	b.AddProvides(map[string][]symbols.Symbol{"scheduler": syms})
+	txt := b.Text()
+	if strings.Contains(txt, "Job.Start") || !strings.Contains(txt, "Run00, Run01") || strings.Contains(txt, "Run25") ||
+		!strings.Contains(txt, "+3 more; arc brief --json lists all") {
+		t.Errorf("text:\n%s", txt)
+	}
+	js, _ := json.Marshal(b)
+	if !strings.Contains(string(js), `"Job.Start"`) || !strings.Contains(string(js), `"Run26"`) {
+		t.Errorf("json must list all provides: %s", js)
+	}
+	if pt := b.ProvidesText(); !strings.HasPrefix(pt, "Concept scheduler provides") || strings.Contains(pt, "why:") {
+		t.Errorf("ProvidesText:\n%s", pt)
 	}
 }

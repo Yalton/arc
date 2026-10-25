@@ -29,3 +29,4 @@ Flags:
 Removals:
 - old-queue: internal/queue (v1 job queue) (replaced by scheduler, remove by 2026-11-15, vap-130)
 - legacy-api-v1: v1 endpoints (replaced by api, remove by 2026-10-01 OVERDUE, vap-140)
+Run 'arc brief <path>' to see what the owning concept already provides.

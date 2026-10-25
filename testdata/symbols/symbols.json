@@ -1,0 +1,156 @@
+{
+  "go/lib.go": [
+    {
+      "name": "MaxItems",
+      "kind": "const",
+      "doc": "MaxItems caps a list.",
+      "file": "go/lib.go",
+      "line": 5
+    },
+    {
+      "name": "ModeFast",
+      "kind": "const",
+      "doc": "ModeFast runs quickly.",
+      "file": "go/lib.go",
+      "line": 10
+    },
+    {
+      "name": "ModeSlow",
+      "kind": "const",
+      "doc": "trailing comment documents it",
+      "file": "go/lib.go",
+      "line": 11
+    },
+    {
+      "name": "Default",
+      "kind": "var",
+      "doc": "Default is the default store.",
+      "file": "go/lib.go",
+      "line": 16
+    },
+    {
+      "name": "Store",
+      "kind": "type",
+      "doc": "Store keeps items.",
+      "file": "go/lib.go",
+      "line": 19
+    },
+    {
+      "name": "Store.Add",
+      "kind": "method",
+      "doc": "Add appends an item to the store.",
+      "file": "go/lib.go",
+      "line": 24
+    },
+    {
+      "name": "Store.Len",
+      "kind": "method",
+      "doc": "Len is on a value receiver.",
+      "file": "go/lib.go",
+      "line": 27
+    },
+    {
+      "name": "Set",
+      "kind": "type",
+      "doc": "Set is generic.",
+      "file": "go/lib.go",
+      "line": 32
+    },
+    {
+      "name": "Set.Has",
+      "kind": "method",
+      "doc": "Has reports membership.",
+      "file": "go/lib.go",
+      "line": 35
+    },
+    {
+      "name": "ParseImportLine",
+      "kind": "func",
+      "doc": "ParseImportLine parses one import line.",
+      "file": "go/lib.go",
+      "line": 38
+    }
+  ],
+  "python/mod.py": [
+    {
+      "name": "load_config",
+      "kind": "func",
+      "doc": "Load the config file.",
+      "file": "python/mod.py",
+      "line": 10
+    },
+    {
+      "name": "fetch_page",
+      "kind": "func",
+      "doc": "Fetch one page over HTTP.",
+      "file": "python/mod.py",
+      "line": 16
+    },
+    {
+      "name": "Registry",
+      "kind": "class",
+      "doc": "The registry.",
+      "file": "python/mod.py",
+      "line": 22
+    },
+    {
+      "name": "no_doc",
+      "kind": "func",
+      "file": "python/mod.py",
+      "line": 37
+    }
+  ],
+  "ts/mod.ts": [
+    {
+      "name": "parseImportLine",
+      "kind": "func",
+      "doc": "Parses an import line.",
+      "file": "ts/mod.ts",
+      "line": 8
+    },
+    {
+      "name": "DEFAULT_TIMEOUT",
+      "kind": "const",
+      "doc": "Default timeout in ms.",
+      "file": "ts/mod.ts",
+      "line": 14
+    },
+    {
+      "name": "counter",
+      "kind": "var",
+      "file": "ts/mod.ts",
+      "line": 16
+    },
+    {
+      "name": "BeadLabel",
+      "kind": "type",
+      "doc": "A bead label.",
+      "file": "ts/mod.ts",
+      "line": 19
+    },
+    {
+      "name": "LabelName",
+      "kind": "type",
+      "file": "ts/mod.ts",
+      "line": 23
+    },
+    {
+      "name": "LabelStore",
+      "kind": "class",
+      "file": "ts/mod.ts",
+      "line": 26
+    },
+    {
+      "name": "walk",
+      "kind": "func",
+      "file": "ts/mod.ts",
+      "line": 28
+    },
+    {
+      "name": "Color",
+      "kind": "type",
+      "file": "ts/mod.ts",
+      "line": 30
+    }
+  ]
+}
