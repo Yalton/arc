@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 )
 
-// version is overridden at build time with -ldflags "-X main.version=...".
-var version = "dev"
+// version is set at build time with -ldflags "-X main.version=..."; when
+// empty, arcVersion falls back to the module version Go recorded.
+var version string
 
 var commands = []string{
 	"init", "place", "brief", "gate", "baseline", "render",
@@ -85,8 +87,26 @@ func runVersion(out *output, args []string) int {
 	if len(args) > 0 {
 		return out.fail(exitUsage, "version: takes no arguments")
 	}
-	out.result("arc "+version, map[string]string{"version": version})
+	v := arcVersion()
+	out.result("arc "+v, map[string]string{"version": v})
 	return exitOK
+}
+
+// arcVersion is the -ldflags version, else the module version of a
+// 'go install module@vX' build, else "dev".
+func arcVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	return resolveVersion(version, info, ok)
+}
+
+func resolveVersion(stamped string, info *debug.BuildInfo, ok bool) string {
+	if stamped != "" {
+		return stamped
+	}
+	if ok && info != nil && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "dev"
 }
 
 func usage() string {

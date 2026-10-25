@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,28 @@ func TestVersion(t *testing.T) {
 	code, out, _ := runArc("version")
 	if code != exitOK || !strings.HasPrefix(out, "arc ") {
 		t.Fatalf("version: code %d, out %q", code, out)
+	}
+}
+
+func TestResolveVersion(t *testing.T) {
+	built := func(v string) *debug.BuildInfo {
+		return &debug.BuildInfo{Main: debug.Module{Path: "github.com/Yalton/arc", Version: v}}
+	}
+	for _, c := range []struct {
+		stamped string
+		info    *debug.BuildInfo
+		ok      bool
+		want    string
+	}{
+		{"v0.0.1", built("v9.9.9"), true, "v0.0.1"},
+		{"", built("v1.2.3"), true, "v1.2.3"},
+		{"", built("(devel)"), true, "dev"},
+		{"", built(""), true, "dev"},
+		{"", nil, false, "dev"},
+	} {
+		if got := resolveVersion(c.stamped, c.info, c.ok); got != c.want {
+			t.Errorf("resolveVersion(%q, %v) = %q, want %q", c.stamped, c.info, got, c.want)
+		}
 	}
 }
 
