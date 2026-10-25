@@ -145,8 +145,17 @@ func extractor(file string) func(file string, data []byte) []Symbol {
 // sentence, capped at maxDoc characters.
 func firstSentence(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if i := strings.Index(s, ". "); i >= 0 {
-		s = s[:i+1]
+	for from := 0; ; {
+		i := strings.Index(s[from:], ". ")
+		if i < 0 {
+			break
+		}
+		end := from + i + 1
+		if !hasSuffix(s[:end], "e.g.", "i.e.", "etc.") {
+			s = s[:end]
+			break
+		}
+		from = end
 	}
 	if utf8.RuneCountInString(s) > maxDoc {
 		r := []rune(s)

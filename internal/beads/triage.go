@@ -8,6 +8,7 @@ import (
 
 	"github.com/Yalton/arc/internal/brief"
 	"github.com/Yalton/arc/internal/registry"
+	"github.com/Yalton/arc/internal/symbols"
 )
 
 // Labels triage adds (SPEC.md, "Beads integration details").
@@ -71,9 +72,13 @@ func Text(b Bead) string {
 	return strings.Join([]string{b.Title, b.Description, b.Design, b.AcceptanceCriteria, notes}, "\n\n")
 }
 
-// Analyze triages b against reg without touching beads. The returned
-// Note is what Triage would append.
-func Analyze(reg *registry.Registry, b Bead, now time.Time) Result {
+// maxCovered is how many existing symbols a review reason names.
+const maxCovered = 3
+
+// Analyze triages b against reg without touching beads. provides is what
+// each concept exports (symbols.ByConcept; nil skips the existing-code
+// check). The returned Note is what Triage would append.
+func Analyze(reg *registry.Registry, provides map[string][]symbols.Symbol, b Bead, now time.Time) Result {
 	text := Text(b)
 	r := Result{ID: b.ID, Title: b.Title}
 	for _, f := range TemplateFields {
@@ -90,6 +95,16 @@ func Analyze(reg *registry.Registry, b Bead, now time.Time) Result {
 	}
 	if len(r.Concepts) == 0 {
 		r.Reasons = append(r.Reasons, "no registry concept resolved from the bead text; name concept ids, aliases or repo paths")
+	}
+	if closest := fieldValue(text, "Closest existing thing"); len(closest) == 0 || isNone(cleanEntry(strings.Join(closest, " "))) {
+		if hits := symbols.Covered(reg, provides, withoutFieldNames(b.Title+"\n"+b.Description), maxCovered); len(hits) > 0 {
+			var names []string
+			for _, h := range hits {
+				names = append(names, fmt.Sprintf("%s:%d %s", h.File, h.Line, h.Name))
+			}
+			r.Reasons = append(r.Reasons, "existing code may already cover this: "+strings.Join(names, ", ")+
+				"; extend it or say why not under 'Closest existing thing'")
+		}
 	}
 	for _, n := range reg.NonGoals {
 		for _, k := range n.Keywords {
@@ -177,8 +192,8 @@ func sameDecision(notes, note string) bool {
 // in it changes with the date), adds the label (skipped when present) and
 // removes the opposite one of arch:ok and arch:review when present. It
 // never touches other labels.
-func Triage(c *Client, reg *registry.Registry, b Bead, now time.Time, dryRun bool) (Result, error) {
-	r := Analyze(reg, b, now)
+func Triage(c *Client, reg *registry.Registry, provides map[string][]symbols.Symbol, b Bead, now time.Time, dryRun bool) (Result, error) {
+	r := Analyze(reg, provides, b, now)
 	if dryRun {
 		return r, nil
 	}
@@ -271,35 +286,12 @@ func conceptFor(reg *registry.Registry, entry string) string {
 	return ""
 }
 
-// conceptsTouched returns the entries of the 'Concepts touched' field:
-// the rest of its line, or when that is empty the lines below it up to a
-// blank line, heading or another field. Entries are split on commas and
-// semicolons and cut before explanations ("goal (extend export)").
+// conceptsTouched returns the entries of the 'Concepts touched' field
+// (fieldValue), split on commas and semicolons and cut before
+// explanations ("goal (extend export)").
 func conceptsTouched(text string) []string {
-	lines := strings.Split(text, "\n")
-	re := fieldLine("Concepts touched")
-	var raw []string
-	for i, l := range lines {
-		loc := re.FindStringIndex(l)
-		if loc == nil {
-			continue
-		}
-		rest := strings.TrimSpace(strings.Trim(strings.TrimSpace(l[loc[1]:]), "*_"))
-		if rest != "" {
-			raw = append(raw, rest)
-			break
-		}
-		for _, next := range lines[i+1:] {
-			t := strings.TrimSpace(next)
-			if t == "" || strings.HasPrefix(t, "#") || anyField(t) {
-				break
-			}
-			raw = append(raw, t)
-		}
-		break
-	}
 	var out []string
-	for _, l := range raw {
+	for _, l := range fieldValue(text, "Concepts touched") {
 		l = bullet.ReplaceAllString(l, "")
 		for _, e := range strings.FieldsFunc(l, func(r rune) bool { return r == ',' || r == ';' }) {
 			if e = cleanEntry(e); e != "" && !isNone(e) {
@@ -308,6 +300,42 @@ func conceptsTouched(text string) []string {
 		}
 	}
 	return out
+}
+
+// fieldValue returns the value of template field name in text: the rest of
+// its line, or when that is empty the lines below it up to a blank line,
+// heading or another field. Nil when the field is absent or empty.
+func fieldValue(text, name string) []string {
+	lines := strings.Split(text, "\n")
+	re := fieldLine(name)
+	for i, l := range lines {
+		loc := re.FindStringIndex(l)
+		if loc == nil {
+			continue
+		}
+		if rest := strings.TrimSpace(strings.Trim(strings.TrimSpace(l[loc[1]:]), "*_")); rest != "" {
+			return []string{rest}
+		}
+		var raw []string
+		for _, next := range lines[i+1:] {
+			t := strings.TrimSpace(next)
+			if t == "" || strings.HasPrefix(t, "#") || anyField(t) {
+				break
+			}
+			raw = append(raw, t)
+		}
+		return raw
+	}
+	return nil
+}
+
+// withoutFieldNames removes the template field names from text, so the
+// words of "Replaces / removes" do not count as what the bead is about.
+func withoutFieldNames(text string) string {
+	for _, f := range TemplateFields {
+		text = fieldLine(f).ReplaceAllString(text, "")
+	}
+	return text
 }
 
 var bullet = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s+`)
@@ -392,12 +420,27 @@ func Run(c *Client, reg *registry.Registry, ids []string, since, now time.Time, 
 		}
 		bs = append(bs, b)
 	}
+	provides := repoProvides(reg, c.Root)
 	for _, b := range bs {
-		r, err := Triage(c, reg, b, now, dryRun)
+		r, err := Triage(c, reg, provides, b, now, dryRun)
 		if err != nil {
 			r.Error = err.Error()
 		}
 		results = append(results, r)
 	}
 	return results, nil
+}
+
+// repoProvides reads what each concept of the repository at root exports.
+// It is best effort: an unreadable tree only skips the existing-code check.
+func repoProvides(reg *registry.Registry, root string) map[string][]symbols.Symbol {
+	if root == "" {
+		return nil
+	}
+	files, err := registry.RepoFiles(root)
+	if err != nil {
+		return nil
+	}
+	provides, _ := symbols.ByConcept(reg, root, files, nil)
+	return provides
 }

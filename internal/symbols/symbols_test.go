@@ -77,9 +77,10 @@ concepts:
 
 func TestFirstSentence(t *testing.T) {
 	for in, want := range map[string]string{
-		"Add appends.\nMore here.": "Add appends.",
-		"No period at all":         "No period at all",
-		"v1.2 is a version. Next.": "v1.2 is a version.",
+		"Add appends.\nMore here.":    "Add appends.",
+		"No period at all":            "No period at all",
+		"v1.2 is a version. Next.":    "v1.2 is a version.",
+		"Renders, e.g. a line. More.": "Renders, e.g. a line.",
 	} {
 		if got := firstSentence(in); got != want {
 			t.Errorf("%q: got %q want %q", in, got, want)

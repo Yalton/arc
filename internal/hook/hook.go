@@ -158,7 +158,7 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		}
 		b.AddProvides(provides)
 		if t := b.ProvidesText(); t != "" {
-			parts = append(parts, "arc: you are creating a new file; check what its concept already provides:\n"+t)
+			parts = append(parts, "arc: you are creating a new file; check what its concept already provides ('arc find <words>' searches all concepts):\n"+t)
 		}
 	}
 	if len(parts) == 0 {

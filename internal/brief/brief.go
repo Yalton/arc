@@ -19,7 +19,7 @@ const MaxProvides = 25
 
 // wholeNote points from the whole-registry view, which omits provides, to
 // the per-path brief that lists them.
-const wholeNote = "Run 'arc brief <path>' to see what the owning concept already provides."
+const wholeNote = "Run 'arc brief <path>' for what the owning concept already provides, or 'arc find <words>' to search all of it."
 
 // Brief is the agent-facing context for a scope. Entries keep registry order.
 type Brief struct {

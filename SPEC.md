@@ -5,7 +5,8 @@ single deterministic CLI (Go, one static binary) that reads a per-repo
 architecture registry and:
 
 - tells an agent, cheaply and at the moment it matters, which concept owns the
-  code it is touching (`brief`, `place`, harness hooks);
+  code it is touching and what already exists (`brief`, `place`, `find`,
+  harness hooks);
 - fails commits and CI when new structure lands without a registry entry, when
   boundaries are crossed, when flags or scheduled removals expire, or when dead
   code or oversized code is added (`gate`);
@@ -229,8 +230,33 @@ Prints the agent-facing context for the given scope, sized to stay small
 
 With no arguments, prints the whole registry in compact form (the
 "always-loaded" view, target under 4,000 tokens; warns if exceeded). It
-omits provides and ends with a line pointing to `arc brief <path>` for them.
+omits provides and ends with a line pointing to `arc brief <path>` and
+`arc find` for them.
 `--bead` resolves concepts from the bead's text via aliases and paths.
+
+### `arc find <words>...`
+
+Ranks concepts and exported symbols (the provides of `arc brief`) against
+the words, so an agent checks for existing code before planning new code.
+Deterministic: words are lowercased, split at camelCase and `snake_case`,
+stopwords dropped and crudely stemmed (`s`/`es`/`ies`, `ing`, `ed`, a final
+`e`), so `parsing labels` meets `parseLabel`. Each query word scores once,
+at the best field it matches; an exact token match counts in full, a prefix
+match (shorter token at least 4 letters) half:
+
+| Target | Field | Weight |
+|---|---|---|
+| symbol | name | 6 |
+| symbol | doc | 3 |
+| symbol | file path segments | 2 |
+| concept | id, name, aliases | 6 |
+| concept | summary, reason, rules | 2 |
+
+Prints up to 3 concepts by score (then registry order) with why they
+matched (`label (alias)`), then up to 10 symbols by score, then shorter
+name, file and line, as `file:line Name - doc (concept)`; symbols under a
+third of the best score are dropped. Exit 0 with results, 1 when nothing
+matches, 2 with no words.
 
 ### `arc gate [--base <ref> | --staged | --all] [--only <check>...]`
 
@@ -273,7 +299,9 @@ to check that the check is configured right.
 ### `arc render`
 
 Rewrites the rendered block in `ARCHITECTURE.md` and the snippet in
-`AGENTS.md`/`CLAUDE.md`. When the repository uses beads (a `.beads/`
+`AGENTS.md`/`CLAUDE.md`. The snippet tells agents to run `arc brief` before
+feature work and `arc find <what you need>` before adding a new file,
+package or concept. When the repository uses beads (a `.beads/`
 directory at the root), the snippet gains a line telling agents to give new
 beads the `triage` template fields, with `Concepts touched` listing registry
 concept ids separated by commas. Output depends only on the tree, so `gate`
@@ -314,6 +342,12 @@ For each bead (`--new`: open beads without an `arch:*` label):
 2. Concepts resolved from the text (aliases, paths); the brief is appended as
    a bead note.
 3. Non-goal keywords matched.
+   When `Closest existing thing` is missing or `none`, the title and
+   description are searched as `arc find` does; a symbol whose name has at
+   least two words (for a method, ignoring the receiver type), all present
+   in that text, is strong evidence, and up to 3 such symbols give
+   `arch:review` with the reason `existing code may already cover this:
+   <file:line Name>, ...`.
 4. Labels: `arch:ok` if fields are present, at least one concept resolved and
    no non-goal matched; otherwise `arch:review` with a note giving the
    reasons. Beads that name a concept not in the registry get `arch:review`,
@@ -369,7 +403,7 @@ internal/gitx/      diff, staged set, history stats
 internal/gate/      one file per check
 internal/imports/   import extraction: go, python, ts/js
 internal/brief/     brief and place
-internal/symbols/   exported symbol extraction: go, python, ts/js
+internal/symbols/   exported symbol extraction (go, python, ts/js) and find
 internal/initcmd/   arc init: scaffold, --scan, hooks, adapters
 internal/hook/      harness payload adapters (claude, codex, opencode)
 internal/beads/     bd CLI wrapper
