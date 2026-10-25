@@ -32,7 +32,7 @@ func runBaseline(out *output, args []string) int {
 	if !k.Baseline {
 		return out.fail(exitUsage, fmt.Sprintf("baseline: checks[%s] has baseline: false, so a baseline would be ignored. Set baseline: true first.", k.ID))
 	}
-	res, err := gate.RecordBaseline(r.root, *k)
+	res, err := gate.RecordBaseline(r.root, r.reg, *k)
 	if err != nil {
 		return out.fail(exitUsage, "baseline: "+err.Error())
 	}

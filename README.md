@@ -60,6 +60,7 @@ calls a model.
 - Duplicate-code checks when [dupl](https://github.com/mibk/dupl) (Go) or
   [jscpd](https://github.com/kucherenko/jscpd) is on `PATH`, with today's
   duplicates accepted as a baseline so only new copies fail the gate.
+  Clones involving test files or ignored files are not reported.
 
 Any item can be turned off or forced: `--claude=false`, `--codex=false`,
 `--opencode=false`, `--scan=false`, `--beads=false`, `--dupl=false`,

@@ -339,7 +339,13 @@ of <path>:<start>-<end>` (dupl `-plumbing` prints it; jscpd's xcode
 reporter line `a.js:1:14: warning: Found 8 lines (1-9) duplicated on file
 b.js (1-9)` is rewritten to it, and its `Found N clones.` and `time:`
 summary lines are dropped). Formats verified with dupl (mibk/dupl, latest
-as of 2026-10) and jscpd 5.4.2; other lines are kept as they are.
+as of 2026-10) and jscpd 5.4.2; other lines are kept as they are. A clone
+with either side in a test file (Go `_test.go`, Python `test_*.py` and
+`*_test.py`, JS/TS `.test.*` and `.spec.*`, or under a `test`, `tests`,
+`testdata` or `__tests__` directory) or in a file the registry ignores is
+dropped, in the gate, `arc baseline` and `audit` alike: table-driven tests
+repeat by design. dupl reports a group of N copies as N pairs, so the pairs
+between non-test copies of a group still fail.
 
 Every failure message names the registry entry involved and the fix, e.g.
 `internal/foo/x.go: unowned. Closest: goal (internal/workgraph), shared.

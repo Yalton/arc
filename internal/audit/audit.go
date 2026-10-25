@@ -5,7 +5,6 @@ package audit
 
 import (
 	"fmt"
-	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -172,7 +171,7 @@ func (r *Report) addLOC(o Options) error {
 	nowLOC := map[string]int{}
 	for _, f := range o.Files {
 		c := o.Reg.Owner(f)
-		if c == nil || IsTest(f) {
+		if c == nil || registry.IsTest(f) {
 			continue
 		}
 		data, ok, err := readRegular(o.Root, f)
@@ -185,7 +184,7 @@ func (r *Report) addLOC(o Options) error {
 	}
 	oldLOC := map[string]int{}
 	if r.Base != "" {
-		counted := func(f string) bool { return o.Reg.Owner(f) != nil && !IsTest(f) }
+		counted := func(f string) bool { return o.Reg.Owner(f) != nil && !registry.IsTest(f) }
 		old, err := gitx.TreeFiles(o.Root, r.Base, counted)
 		if err != nil {
 			return err
@@ -302,7 +301,7 @@ func (r *Report) addRemovalBeads(o Options) {
 func (r *Report) addChecks(o Options) {
 	for _, k := range o.Reg.Checks {
 		res := CheckResult{ID: gate.ExternalPrefix + k.ID, New: []string{}}
-		lines, err := gate.RunExternal(o.Root, k)
+		lines, err := gate.RunExternal(o.Root, o.Reg, k)
 		if err == nil {
 			var fresh []string
 			fresh, res.Baselined, err = gate.SplitBaselined(o.Root, k, lines)
@@ -318,28 +317,4 @@ func (r *Report) addChecks(o Options) {
 
 func removalItem(rm registry.Removal) RemovalItem {
 	return RemovalItem{ID: rm.ID, What: rm.What, Paths: rm.Paths, ReplacedBy: rm.ReplacedBy, RemoveBy: rm.RemoveBy, Bead: rm.Bead}
-}
-
-// testDirs are directory names whose contents count as tests.
-var testDirs = map[string]bool{"test": true, "tests": true, "testdata": true, "__tests__": true}
-
-// IsTest reports whether a repo-relative path is test code or test data,
-// by common naming conventions (Go, Python, JS/TS) and test directories.
-func IsTest(p string) bool {
-	dir, base := path.Split(p)
-	for _, seg := range strings.Split(strings.Trim(dir, "/"), "/") {
-		if testDirs[seg] {
-			return true
-		}
-	}
-	stem := strings.TrimSuffix(base, path.Ext(base))
-	switch path.Ext(base) {
-	case ".go":
-		return strings.HasSuffix(stem, "_test")
-	case ".py":
-		return strings.HasPrefix(stem, "test_") || strings.HasSuffix(stem, "_test")
-	case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts":
-		return strings.HasSuffix(stem, ".test") || strings.HasSuffix(stem, ".spec")
-	}
-	return false
 }

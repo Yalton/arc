@@ -100,17 +100,17 @@ func ensureCloneChecks(root string, reg *registry.Registry, add []registry.Check
 	if reg, err = registry.Parse([]byte(text)); err != nil {
 		return nil, err
 	}
-	baselineChecks(root, add, res)
+	baselineChecks(root, reg, add, res)
 	return reg, nil
 }
 
 // baselineChecks records the current findings of each new check as
 // accepted, so adoption is incremental: only new duplicates fail.
-func baselineChecks(root string, ks []registry.Check, res *Result) {
+func baselineChecks(root string, reg *registry.Registry, ks []registry.Check, res *Result) {
 	for _, k := range ks {
 		path, _ := gate.BaselinePath(k.ID)
 		_, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(path)))
-		b, err := gate.RecordBaseline(root, k)
+		b, err := gate.RecordBaseline(root, reg, k)
 		if err != nil {
 			res.notice("baseline for checks.%s not recorded (%v); run 'arc baseline %s'", k.ID, err, k.ID)
 			continue
