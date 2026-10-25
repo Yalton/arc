@@ -130,6 +130,8 @@ checks:                         # external tools, run by gate
   - id: staticcheck
     command: ["staticcheck", "./..."]
     baseline: true
+
+beads: true                     # repo tracks work in beads (snippet bead line)
 ```
 
 Validation rules (`arc validate`, also run by `gate`):
@@ -140,14 +142,15 @@ Validation rules (`arc validate`, also run by `gate`):
   deleted, see gate);
 - no file is owned by more than one concept (most specific glob does not win;
   overlap is an error, so ownership stays unambiguous);
-- `expires` / `remove_by` are valid dates.
+- `expires` / `remove_by` are valid dates;
+- `beads`, when present, is a boolean (default `false`).
 
 ## Commands
 
 All commands accept `--json`. Exit codes: `0` ok, `1` violations found, `2`
 usage, configuration or environment error (including a failed `bd` call).
 
-### `arc init [--scan] [--claude] [--codex] [--opencode] [--ci github|gitea|none] [--no-detect]`
+### `arc init [--scan] [--claude] [--codex] [--opencode] [--beads] [--ci github|gitea|none] [--no-detect]`
 
 Creates `.arch/registry.yaml` (skeleton), `.arch/.gitignore` for `cache/`,
 the rendered block in `ARCHITECTURE.md`, the instruction snippet in
@@ -161,7 +164,7 @@ the hook to `pre-commit.local` and installs a hook that runs it first.
 Harness flags install the matching adapter. Idempotent.
 
 Plain `arc init` sets up everything that applies: each of `--claude`,
-`--codex`, `--opencode`, `--ci` and `--scan` that is not given on the command
+`--codex`, `--opencode`, `--ci`, `--scan` and `--beads` that is not given on the command
 line is detected, reading only the repository, `PATH` and git config:
 
 - a harness when its project directory (`.claude/`, `.codex/`, `.opencode/`)
@@ -171,7 +174,11 @@ line is detected, reading only the repository, `PATH` and git config:
   workflow; any other host is `gitea` (Gitea or Forgejo); no origin or a
   local path gets none;
 - `--scan` only when init creates the registry and the repository has a file
-  neither the skeleton's ignore list nor the built-in ignores cover.
+  neither the skeleton's ignore list nor the built-in ignores cover;
+- `--beads` (write `beads: true` in the new registry) only when init creates
+  the registry and a `.beads/` directory exists. For an existing registry
+  without `beads: true`, init prints a notice suggesting the field when
+  `.beads/` exists (or `--beads` is given) and leaves the registry alone.
 
 Init prints one line per item before what it created, e.g. `detected claude:
 .claude/ exists`, `not detected codex: no .codex/ and codex not on PATH`,
@@ -265,11 +272,12 @@ to check that the check is configured right.
 ### `arc render`
 
 Rewrites the rendered block in `ARCHITECTURE.md` and the snippet in
-`AGENTS.md`/`CLAUDE.md`. When the repository uses beads (a `.beads/`
-directory at the root), the snippet gains a line telling agents to give new
-beads the `triage` template fields, with `Concepts touched` listing registry
-concept ids separated by commas. Output depends only on the tree, so `gate`
-staleness checks agree with `render`.
+`AGENTS.md`/`CLAUDE.md`. When the registry sets `beads: true`, the snippet
+gains a line telling agents to give new beads the `triage` template fields,
+with `Concepts touched` listing registry concept ids separated by commas.
+Output depends only on tracked files (the registry and the managed files),
+never on untracked state such as a `.beads/` directory, so `gate` staleness
+checks agree with `render` in a fresh clone (CI).
 
 ### `arc hook <claude|codex|opencode> [<event>]`
 

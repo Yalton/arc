@@ -142,3 +142,6 @@ concepts:
 limits:
   file_lines: 1000
   function_lines: 150
+
+# arc tracks its own work in beads; the snippet asks for the triage fields.
+beads: true

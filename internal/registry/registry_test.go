@@ -87,6 +87,20 @@ func TestUnknownKeyRejected(t *testing.T) {
 	}
 }
 
+func TestBeadsField(t *testing.T) {
+	r, err := Parse([]byte("version: 1\nbeads: true\n"))
+	if err != nil || !r.Beads {
+		t.Fatalf("beads: true: r %+v, err %v", r, err)
+	}
+	if r, err := Parse([]byte("version: 1\n")); err != nil || r.Beads {
+		t.Fatalf("beads must default to false: r %+v, err %v", r, err)
+	}
+	// Strict parse: a typo'd value is an error, not a silent false.
+	if _, err := Parse([]byte("version: 1\nbeads: yes please\n")); err == nil {
+		t.Fatal("non-boolean beads accepted")
+	}
+}
+
 func TestRemovalPathsExemptFromExistence(t *testing.T) {
 	// valid.yaml has removal path internal/gone/** that matches nothing.
 	for _, p := range loadFixture(t, "valid.yaml").Validate(fixtureFiles) {

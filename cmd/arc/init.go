@@ -17,6 +17,7 @@ func runInit(out *output, args []string) int {
 	fs.BoolVar(&opts.Claude, "claude", false, "install the Claude Code hook adapter")
 	fs.BoolVar(&opts.Codex, "codex", false, "install the Codex hook adapter")
 	fs.BoolVar(&opts.Opencode, "opencode", false, "install the opencode plugin shim")
+	fs.BoolVar(&opts.Beads, "beads", false, "set beads: true in a new registry (the repository uses beads)")
 	fs.StringVar(&opts.CI, "ci", "", "write a CI workflow running arc gate: github, gitea or none")
 	noDetect := fs.Bool("no-detect", false, "apply only the flags given; detect nothing")
 	if err := fs.Parse(args); err != nil {

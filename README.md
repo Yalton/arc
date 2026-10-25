@@ -46,12 +46,15 @@ calls a model.
   - Claude Code: `.claude/settings.json`
   - Codex: `.codex/hooks.json`
   - opencode: `.opencode/plugins/arc.js`
+- `beads: true` in a new registry when the repository has a `.beads/`
+  directory, so the agent instructions ask for the bead fields `arc triage`
+  checks.
 - A CI workflow from the `origin` remote: `.github/workflows/arc.yml` for
   GitHub, `.gitea/workflows/arc.yml` for Gitea or Forgejo. It installs the same
   arc version with `go install` and needs no secrets.
 
 Any item can be turned off or forced: `--claude=false`, `--codex=false`,
-`--opencode=false`, `--scan=false`, `--ci none|github|gitea`. `--no-detect`
+`--opencode=false`, `--scan=false`, `--beads=false`, `--ci none|github|gitea`. `--no-detect`
 applies only the flags you pass.
 
 ## Everyday commands
