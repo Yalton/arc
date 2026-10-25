@@ -16,14 +16,14 @@ import (
 // Finding records how one init item was decided: by an explicit flag or by
 // detection, which reads only the repository, the PATH list and git config.
 type Finding struct {
-	Item   string `json:"item"`   // claude, codex, opencode, ci, scan or beads
+	Item   string `json:"item"`   // a Detectable name
 	Value  string `json:"value"`  // on/off, or the CI provider or none
 	Source string `json:"source"` // "flag" or "detected"
 	Reason string `json:"reason"` // why, e.g. ".claude/ exists"
 }
 
 // Detectable lists the flag names Resolve can fill in, in report order.
-var Detectable = []string{"claude", "codex", "opencode", "ci", "scan", "beads"}
+var Detectable = []string{"claude", "codex", "opencode", "ci", "scan", "beads", "dupl", "jscpd"}
 
 // Resolve fills every item whose flag is not in explicit from detection and
 // returns the options to run with plus one Finding per item. pathList is a
@@ -51,6 +51,10 @@ func Resolve(root, pathList string, opts Options, explicit map[string]bool) (Opt
 				v = onOff(opts.Scan)
 			case "beads":
 				v = onOff(opts.Beads)
+			case "dupl":
+				v = onOff(opts.Dupl)
+			case "jscpd":
+				v = onOff(opts.Jscpd)
 			case "ci":
 				v = opts.CI
 				if v == "" {
@@ -85,6 +89,12 @@ func Resolve(root, pathList string, opts Options, explicit map[string]bool) (Opt
 		case "beads":
 			on, why = detectBeads(root)
 			opts.Beads = on
+		case "dupl":
+			on, why = detectClone(root, pathList, item)
+			opts.Dupl = on
+		case "jscpd":
+			on, why = detectClone(root, pathList, item)
+			opts.Jscpd = on
 		case "ci":
 			provider, why := detectCI(root)
 			opts.CI, opts.CIDetected = provider, provider != ""

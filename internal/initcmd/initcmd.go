@@ -21,6 +21,8 @@ type Options struct {
 	Codex    bool // add arc's hooks to .codex/hooks.json
 	Opencode bool // install arc's plugin shim in .opencode/plugins/
 	Beads    bool // set beads: true in a new registry (the repository uses beads)
+	Dupl     bool // add the dupl clone check when the registry lacks it (clones.go)
+	Jscpd    bool // add the jscpd clone check when the registry lacks it
 
 	CI string // "github" or "gitea" ("none" or ""): write a CI workflow running arc gate (ci.go)
 	// CIDetected marks CI as chosen by detection rather than requested: an
@@ -57,6 +59,9 @@ func Run(root string, opts Options) (*Result, error) {
 	}
 	reg, err := ensureRegistry(root, opts, res)
 	if err != nil {
+		return res, err
+	}
+	if reg, err = ensureCloneChecks(root, reg, missingChecks(reg, wantedClones(opts)), res); err != nil {
 		return res, err
 	}
 	if err := ensureGitignore(root, res); err != nil {

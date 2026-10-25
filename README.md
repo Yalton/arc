@@ -56,9 +56,13 @@ calls a model.
   boundary, a removed rule, a later deadline, wider concept paths) fail until
   a maintainer adds the `arch-approved` label, so an agent cannot approve its
   own architecture change.
+- Duplicate-code checks when [dupl](https://github.com/mibk/dupl) (Go) or
+  [jscpd](https://github.com/kucherenko/jscpd) is on `PATH`, with today's
+  duplicates accepted as a baseline so only new copies fail the gate.
 
 Any item can be turned off or forced: `--claude=false`, `--codex=false`,
-`--opencode=false`, `--scan=false`, `--beads=false`, `--ci none|github|gitea`. `--no-detect`
+`--opencode=false`, `--scan=false`, `--beads=false`, `--dupl=false`,
+`--jscpd=false`, `--ci none|github|gitea`. `--no-detect`
 applies only the flags you pass.
 
 ## Everyday commands

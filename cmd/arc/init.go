@@ -18,6 +18,8 @@ func runInit(out *output, args []string) int {
 	fs.BoolVar(&opts.Codex, "codex", false, "install the Codex hook adapter")
 	fs.BoolVar(&opts.Opencode, "opencode", false, "install the opencode plugin shim")
 	fs.BoolVar(&opts.Beads, "beads", false, "set beads: true in a new registry (the repository uses beads)")
+	fs.BoolVar(&opts.Dupl, "dupl", false, "add the dupl duplicate-code check (Go) if the registry lacks it")
+	fs.BoolVar(&opts.Jscpd, "jscpd", false, "add the jscpd duplicate-code check if the registry lacks it")
 	fs.StringVar(&opts.CI, "ci", "", "write a CI workflow running arc gate: github, gitea or none")
 	noDetect := fs.Bool("no-detect", false, "apply only the flags given; detect nothing")
 	if err := fs.Parse(args); err != nil {

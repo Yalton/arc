@@ -34,16 +34,16 @@ func TestResolveDetectsEverything(t *testing.T) {
 	root := newRepo(t, "main.go", "internal/a/a.go")
 	write(t, root, ".codex/config.toml", "")
 	git(t, root, "remote", "add", "origin", "https://github.com/x/y.git")
-	bin := fakeBin(t, "claude")
+	bin := fakeBin(t, "claude", "dupl")
 	write(t, bin, "opencode", "not executable")
 
 	opts, fs := Resolve(root, bin, Options{}, nil)
-	want := Options{Scan: true, Claude: true, Codex: true, CI: "github", CIDetected: true}
+	want := Options{Scan: true, Claude: true, Codex: true, CI: "github", CIDetected: true, Dupl: true}
 	if opts != want {
 		t.Errorf("opts = %+v, want %+v", opts, want)
 	}
 	got := findings(fs)
-	wantF := []string{"claude=on detected", "codex=on detected", "opencode=off detected", "ci=github detected", "scan=on detected", "beads=off detected"}
+	wantF := []string{"claude=on detected", "codex=on detected", "opencode=off detected", "ci=github detected", "scan=on detected", "beads=off detected", "dupl=on detected", "jscpd=off detected"}
 	if !reflect.DeepEqual(got, wantF) {
 		t.Errorf("findings = %v, want %v", got, wantF)
 	}
@@ -98,6 +98,8 @@ func TestResolveNothingDetected(t *testing.T) {
 		"no origin remote",
 		"new registry but no files to scan",
 		"no .beads/ directory",
+		"no Go files",
+		"jscpd not on PATH; install it with 'npm install -g jscpd' and rerun arc init",
 	}
 	if len(fs) != len(want) {
 		t.Fatalf("findings = %v", findings(fs))

@@ -150,7 +150,7 @@ Validation rules (`arc validate`, also run by `gate`):
 All commands accept `--json`. Exit codes: `0` ok, `1` violations found, `2`
 usage, configuration or environment error (including a failed `bd` call).
 
-### `arc init [--scan] [--claude] [--codex] [--opencode] [--beads] [--ci github|gitea|none] [--no-detect]`
+### `arc init [--scan] [--claude] [--codex] [--opencode] [--beads] [--dupl] [--jscpd] [--ci github|gitea|none] [--no-detect]`
 
 Creates `.arch/registry.yaml` (skeleton), `.arch/.gitignore` for `cache/`,
 the rendered block in `ARCHITECTURE.md`, the instruction snippet in
@@ -164,7 +164,7 @@ the hook to `pre-commit.local` and installs a hook that runs it first.
 Harness flags install the matching adapter. Idempotent.
 
 Plain `arc init` sets up everything that applies: each of `--claude`,
-`--codex`, `--opencode`, `--ci`, `--scan` and `--beads` that is not given on the command
+`--codex`, `--opencode`, `--ci`, `--scan`, `--beads`, `--dupl` and `--jscpd` that is not given on the command
 line is detected, reading only the repository, `PATH` and git config:
 
 - a harness when its project directory (`.claude/`, `.codex/`, `.opencode/`)
@@ -178,7 +178,23 @@ line is detected, reading only the repository, `PATH` and git config:
 - `--beads` (write `beads: true` in the new registry) only when init creates
   the registry and a `.beads/` directory exists. For an existing registry
   without `beads: true`, init prints a notice suggesting the field when
-  `.beads/` exists (or `--beads` is given) and leaves the registry alone.
+  `.beads/` exists (or `--beads` is given) and leaves the registry alone;
+- the duplicate-code checks: `--dupl` when the repository has Go files and
+  `dupl` is on `PATH`, `--jscpd` when `jscpd` is on `PATH`. A missing tool's
+  line names its install command (`go install github.com/mibk/dupl@latest`,
+  `npm install -g jscpd`).
+
+Each enabled duplicate-code check is added to `checks` only when the
+registry (new or existing) has no check with that id, as `{id: dupl,
+command: ["dupl", "-plumbing", "."], baseline: true}` or `{id: jscpd,
+command: ["jscpd", "--reporters", "xcode", "--no-colors", "--no-tips", "."],
+baseline: true}`. The registry is edited as text, touching only the `checks`
+lines, so comments survive: the items are appended to a block list,
+replace a `checks: []` line, or start a new `checks:` key at the end. When
+none of those applies (e.g. a non-empty flow list), or the edited file would
+not parse to the same registry plus the new checks, init leaves the file
+alone and prints the exact YAML to add. For each check it added, init then
+records the baseline (`arc baseline <id>`), so only new duplicates fail.
 
 Init prints one line per item before what it created, e.g. `detected claude:
 .claude/ exists`, `not detected codex: no .codex/ and codex not on PATH`,
@@ -249,7 +265,7 @@ them and points to `place`/`brief`); giving two mode flags is also exit 2.
 | `flags` | a flag is past `expires` |
 | `removals` | a removal is past `remove_by`; or its paths no longer exist but the entry remains (delete the entry) |
 | `size` | a changed file exceeds `file_lines`, or a changed Go function exceeds `function_lines` |
-| `checks.*` | an external command reports a finding not in its baseline (compared as a multiset: a finding fails when its normalized form occurs more times than in the baseline) |
+| `checks.*` | an external command reports a finding not in its baseline (compared as a multiset: a finding fails when its normalized form occurs more times than in the baseline); for the duplicate-code ids `dupl` and `jscpd` the message is `duplicates existing code: <line>; extend or reuse the existing code instead of copying` |
 | `reasons` | the change adds a non-draft concept (or turns a draft into one) without a `reason`; skipped when the comparison point has no registry (adoption); with `--all`, every non-draft concept needs one |
 | `approval` | `--base` only: the registry change is structural (below) and the pull request lacks the `arch-approved` label |
 | `drafts` | warning only: draft concepts exist |
@@ -280,6 +296,14 @@ Pre-existing violations in untouched files do not fail `placement`, `size`
 or `boundaries`; only the change set is judged. `arc gate --all` judges the
 whole tree (used by `audit`).
 
+The checks with id `dupl` and `jscpd` are clone detectors. Their output is
+canonicalized to one sorted line per clone, `<path>:<start>-<end>: duplicate
+of <path>:<start>-<end>` (dupl `-plumbing` prints it; jscpd's xcode
+reporter line `a.js:1:14: warning: Found 8 lines (1-9) duplicated on file
+b.js (1-9)` is rewritten to it, and its `Found N clones.` and `time:`
+summary lines are dropped). Formats verified with dupl (mibk/dupl, latest
+as of 2026-10) and jscpd 5.4.2; other lines are kept as they are.
+
 Every failure message names the registry entry involved and the fix, e.g.
 `internal/foo/x.go: unowned. Closest: goal (internal/workgraph), shared.
 Extend one, or add a concept to .arch/registry.yaml with a reason.`
@@ -287,8 +311,8 @@ Extend one, or add a concept to .arch/registry.yaml with a reason.`
 ### `arc baseline <check-id>`
 
 Records the current findings of an external check as accepted. The baseline
-file holds one normalized line per finding (line and column numbers
-stripped), sorted, duplicates kept. Any output is accepted, since linters
+file holds one normalized line per finding (line and column numbers, and
+`<start>-<end>` line ranges, after a path stripped), sorted, duplicates kept. Any output is accepted, since linters
 exit non-zero with findings, so the command reports added/removed counts and
 prints up to 5 newly accepted lines (`added_sample` in `--json`) for a human
 to check that the check is configured right.
