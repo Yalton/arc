@@ -27,20 +27,28 @@ concepts:
 func newRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	cmd := exec.Command("git", "init", "-q", root)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v %s", err, out)
-	}
+	git(t, root, "init", "-q")
 	write(t, root, ".arch/registry.yaml", testRegistry)
 	write(t, root, "internal/goal/goal.go", "package goal\n")
 	write(t, root, "legacy/old.go", "package legacy\n")
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "init")
 	// Resolve symlinks (e.g. /tmp on macOS) so paths match git's top-level.
 	r, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// git runs git in root with no user or system config.
+func git(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"}, args...)...)
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v %s", args, err, out)
+	}
 }
 
 func write(t *testing.T, root, rel, content string) {

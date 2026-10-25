@@ -43,7 +43,12 @@ type Decision struct {
 	Deny    bool
 	Reason  string // why, when denying
 	Context string // added context for the agent, when allowing
-	Warning string // arc-internal problem; the action is still allowed
+	// Feedback is a problem the agent must act on that arc noticed after a
+	// shell command already ran (it cannot be denied). Adapters deliver it
+	// as the harness's post-tool feedback, or as context where that is the
+	// only channel.
+	Feedback string
+	Warning  string // arc-internal problem; the action is still allowed
 }
 
 // cacheDir holds per-session hook state (gitignored by arc init).
@@ -93,7 +98,7 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		return Decision{}, err
 	}
 
-	var concepts, created []string
+	var concepts, created, newPaths []string
 	for _, p := range abs {
 		rel, ok := gitx.Rel(root, p)
 		if !ok {
@@ -112,13 +117,12 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 			concepts = appendUnique(concepts, res.Concept)
 			if isNew {
 				created = appendUnique(created, res.Concept)
+				newPaths = append(newPaths, rel)
 			}
 		}
 	}
-	fresh, err := markSeen(root, ev.SessionID, concepts)
-	if err != nil {
-		return Decision{}, err
-	}
+	st := loadSession(root, ev.SessionID)
+	fresh := st.markConcepts(concepts)
 	// A new file is where duplication starts, so creating one repeats what
 	// its concept provides even when the concept was briefed already.
 	var again []string
@@ -127,12 +131,30 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 			again = append(again, c)
 		}
 	}
+	for _, p := range newPaths {
+		st.markNew(p)
+	}
+	text, err := briefContext(root, reg, fresh, again, "the code you are editing", now)
+	if err != nil {
+		return Decision{}, err
+	}
+	if err := st.save(); err != nil {
+		return Decision{Context: text}, err
+	}
+	return Decision{Context: text}, nil
+}
+
+// briefContext renders the brief of the concepts in fresh, and only the
+// provides of the concepts in again (already briefed, but getting a new
+// file), as added context. what names the code ("the code you are
+// editing"). It is empty when there is nothing to say.
+func briefContext(root string, reg *registry.Registry, fresh, again []string, what string, now time.Time) (string, error) {
 	if len(fresh) == 0 && len(again) == 0 {
-		return Decision{}, nil
+		return "", nil
 	}
 	files, err := registry.RepoFiles(root)
 	if err != nil {
-		return Decision{}, err
+		return "", err
 	}
 	ids := map[string]bool{}
 	for _, c := range append(append([]string(nil), fresh...), again...) {
@@ -140,31 +162,28 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 	}
 	provides, err := symbols.ByConcept(reg, root, files, ids)
 	if err != nil {
-		return Decision{}, err
+		return "", err
 	}
 	var parts []string
 	if len(fresh) > 0 {
 		b, err := brief.ForConcepts(reg, fresh, now)
 		if err != nil {
-			return Decision{}, err
+			return "", err
 		}
 		b.AddProvides(provides)
-		parts = append(parts, "arc architecture brief for the code you are editing:\n"+b.Text())
+		parts = append(parts, "arc architecture brief for "+what+":\n"+b.Text())
 	}
 	if len(again) > 0 {
 		b, err := brief.ForConcepts(reg, again, now)
 		if err != nil {
-			return Decision{}, err
+			return "", err
 		}
 		b.AddProvides(provides)
 		if t := b.ProvidesText(); t != "" {
 			parts = append(parts, "arc: you are creating a new file; check what its concept already provides ('arc find <words>' searches all concepts):\n"+t)
 		}
 	}
-	if len(parts) == 0 {
-		return Decision{}, nil
-	}
-	return Decision{Context: strings.Join(parts, "")}, nil
+	return strings.Join(parts, ""), nil
 }
 
 // isBdCreate reports whether command line cmd runs 'bd create' as a
@@ -270,17 +289,11 @@ func createdIDs(output string) []string {
 	}
 }
 
-// postShell triages the beads a 'bd create' shell command reports creating
-// and returns the outcome as context (SPEC.md, "arc hook"). Only ids named
-// in the command's output are triaged, never other beads.
+// postShell reports what a finished shell command did to the working
+// tree (see shellChanges) and triages the beads a 'bd create' command
+// reports creating (SPEC.md, "arc hook"). Only ids named in the command's
+// output are triaged, never other beads.
 func postShell(ev Event, now time.Time) (Decision, error) {
-	if !isBdCreate(ev.Command) {
-		return Decision{}, nil
-	}
-	ids := createdIDs(ev.Output)
-	if len(ids) == 0 {
-		return Decision{}, nil
-	}
 	root, err := findRoot(ev.Cwd)
 	if err != nil {
 		return Decision{}, nil
@@ -292,6 +305,35 @@ func postShell(ev Event, now time.Time) (Decision, error) {
 	if err != nil {
 		return Decision{}, err
 	}
+	var d Decision
+	var warnings, contexts []string
+	fc, err := shellChanges(root, reg, ev.SessionID, now)
+	if err != nil { // e.g. state not saved: still report what was found
+		warnings = append(warnings, "arc hook: "+err.Error())
+	}
+	d.Feedback = fc.Feedback
+	if fc.Context != "" {
+		contexts = append(contexts, fc.Context)
+	}
+	if ids := createdIDs(ev.Output); isBdCreate(ev.Command) && len(ids) > 0 {
+		td, err := triageBeads(root, reg, ids, now)
+		if err != nil {
+			warnings = append(warnings, "arc hook: "+err.Error())
+		}
+		if td.Warning != "" {
+			warnings = append(warnings, td.Warning)
+		}
+		if td.Context != "" {
+			contexts = append(contexts, td.Context)
+		}
+	}
+	d.Warning = strings.Join(warnings, "\n")
+	d.Context = strings.Join(contexts, "\n\n")
+	return d, nil
+}
+
+// triageBeads runs triage on ids and returns the outcome as context.
+func triageBeads(root string, reg *registry.Registry, ids []string, now time.Time) (Decision, error) {
 	c, notice := beads.Open(root)
 	if c == nil {
 		return Decision{Warning: "arc hook: " + notice}, nil
@@ -330,37 +372,6 @@ func findRoot(dir string) (string, error) {
 		}
 		dir = parent
 	}
-}
-
-var unsafeID = regexp.MustCompile(`[^A-Za-z0-9._-]`)
-
-// markSeen records concepts as briefed in this session and returns the
-// ones not briefed before. Without a session id every brief is fresh.
-func markSeen(root, session string, concepts []string) ([]string, error) {
-	if len(concepts) == 0 || session == "" {
-		return concepts, nil
-	}
-	dir := filepath.Join(root, filepath.FromSlash(cacheDir))
-	path := filepath.Join(dir, "hook-"+unsafeID.ReplaceAllString(session, "_")+".json")
-	var seen []string
-	if data, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(data, &seen) // corrupt state: start over
-	}
-	var fresh []string
-	for _, c := range concepts {
-		if !contains(seen, c) {
-			fresh = append(fresh, c)
-			seen = append(seen, c)
-		}
-	}
-	if len(fresh) == 0 {
-		return nil, nil
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fresh, err
-	}
-	data, _ := json.Marshal(seen)
-	return fresh, os.WriteFile(path, data, 0o644)
 }
 
 func contains(xs []string, x string) bool {

@@ -1,0 +1,12 @@
+{
+  "session_id": "sess-1",
+  "transcript_path": "/home/user/.claude/projects/x/sess-1.jsonl",
+  "cwd": "{{ROOT}}",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {"command": "mkdir -p internal/foo && cat > internal/foo/x.go <<'EOF'\npackage foo\nEOF", "description": "Write file"},
+  "tool_response": {"stdout": "", "stderr": "", "interrupted": false, "isImage": false},
+  "tool_use_id": "toolu_04",
+  "duration_ms": 12
+}

@@ -73,3 +73,45 @@ func TestGlobEscape(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// An install from before the Bash post-hook (PreToolUse only) gains the
+// PostToolUse entry on rerun, once.
+func TestEnsureHooksAddsShellPostHookToOldInstall(t *testing.T) {
+	for _, c := range []struct {
+		rel, cmd, preMatcher, postMatcher string
+		ensure                            func(string, *Result) error
+	}{
+		{claudeSettingsPath, ClaudeHookCommand, "Write|Edit|MultiEdit|NotebookEdit", "Bash", ensureClaude},
+		{codexHooksPath, CodexHookCommand, "^apply_patch$", "^Bash$", ensureCodex},
+	} {
+		root := t.TempDir()
+		path := filepath.Join(root, filepath.FromSlash(c.rel))
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		old := `{"hooks": {"PreToolUse": [{"matcher": "` + c.preMatcher + `", "hooks": [{"type": "command", "command": "` + c.cmd + `"}]}]}}`
+		os.WriteFile(path, []byte(old), 0o644)
+		res := &Result{}
+		if err := c.ensure(root, res); err != nil || len(res.Updated) != 1 {
+			t.Fatalf("%s: updated %v err %v", c.rel, res.Updated, err)
+		}
+		data, _ := os.ReadFile(path)
+		var s struct {
+			Hooks map[string][]struct {
+				Matcher string
+				Hooks   []struct{ Command string }
+			}
+		}
+		if err := json.Unmarshal(data, &s); err != nil {
+			t.Fatal(err)
+		}
+		if pre := s.Hooks["PreToolUse"]; len(pre) != 1 {
+			t.Fatalf("%s: PreToolUse duplicated: %+v", c.rel, pre)
+		}
+		if post := s.Hooks["PostToolUse"]; len(post) != 1 || post[0].Matcher != c.postMatcher || post[0].Hooks[0].Command != c.cmd {
+			t.Fatalf("%s: PostToolUse = %+v", c.rel, post)
+		}
+		res = &Result{}
+		if err := c.ensure(root, res); err != nil || len(res.Updated)+len(res.Created) != 0 {
+			t.Fatalf("%s: rerun changed %v %v err %v", c.rel, res.Created, res.Updated, err)
+		}
+	}
+}
