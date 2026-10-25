@@ -34,16 +34,16 @@ func TestResolveDetectsEverything(t *testing.T) {
 	root := newRepo(t, "main.go", "internal/a/a.go")
 	write(t, root, ".codex/config.toml", "")
 	git(t, root, "remote", "add", "origin", "https://github.com/x/y.git")
-	bin := fakeBin(t, "claude")
+	bin := fakeBin(t, "claude", "dupl")
 	write(t, bin, "opencode", "not executable")
 
 	opts, fs := Resolve(root, bin, Options{}, nil)
-	want := Options{Scan: true, Claude: true, Codex: true, CI: "github", CIDetected: true}
+	want := Options{Scan: true, Claude: true, Codex: true, CI: "github", CIDetected: true, Dupl: true}
 	if opts != want {
 		t.Errorf("opts = %+v, want %+v", opts, want)
 	}
 	got := findings(fs)
-	wantF := []string{"claude=on detected", "codex=on detected", "opencode=off detected", "ci=github detected", "scan=on detected"}
+	wantF := []string{"claude=on detected", "codex=on detected", "opencode=off detected", "ci=github detected", "scan=on detected", "beads=off detected", "dupl=on detected", "jscpd=off detected"}
 	if !reflect.DeepEqual(got, wantF) {
 		t.Errorf("findings = %v, want %v", got, wantF)
 	}
@@ -97,11 +97,64 @@ func TestResolveNothingDetected(t *testing.T) {
 		"no .opencode/ and opencode not on PATH",
 		"no origin remote",
 		"new registry but no files to scan",
+		"no .beads/ directory",
+		"no Go files",
+		"jscpd not on PATH; install it with 'npm install -g jscpd' and rerun arc init",
+	}
+	if len(fs) != len(want) {
+		t.Fatalf("findings = %v", findings(fs))
 	}
 	for i, f := range fs {
 		if f.Reason != want[i] {
 			t.Errorf("%s reason = %q, want %q", f.Item, f.Reason, want[i])
 		}
+	}
+}
+
+func TestBeadsDetectedForNewRegistry(t *testing.T) {
+	root := newRepo(t, "main.go")
+	write(t, root, ".beads/config.yaml", "")
+	opts, fs := Resolve(root, fakeBin(t), Options{}, nil)
+	if !opts.Beads || fs[5].Item != "beads" || fs[5].Reason != ".beads/ exists" {
+		t.Fatalf("opts %+v, finding %+v", opts, fs[5])
+	}
+	if _, err := Run(root, opts); err != nil {
+		t.Fatal(err)
+	}
+	if reg := validate(t, root); !reg.Beads {
+		t.Error("new registry lacks beads: true")
+	}
+	if !strings.Contains(readFile(t, filepath.Join(root, "AGENTS.md")), "Concepts touched") {
+		t.Error("snippet lacks the bead line")
+	}
+
+	// Rerun: the registry exists, so nothing is detected or rewritten.
+	opts, fs = Resolve(root, fakeBin(t), Options{}, nil)
+	if opts.Beads || fs[5].Reason != registry.Path+" exists" {
+		t.Errorf("rerun: %+v %+v", opts, fs[5])
+	}
+}
+
+func TestBeadsNoticeForExistingRegistry(t *testing.T) {
+	root := newRepo(t, "main.go")
+	if _, err := Run(root, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	before := readFile(t, filepath.Join(root, registry.Path))
+	if strings.Contains(before, "beads: true") {
+		t.Fatalf("skeleton without beads sets it:\n%s", before)
+	}
+	res, err := Run(root, Options{})
+	if err != nil || anyContains(res.Notices, "beads: true") {
+		t.Fatalf("notice without .beads/: %v %v", err, res.Notices)
+	}
+	write(t, root, ".beads/config.yaml", "")
+	res, err = Run(root, Options{})
+	if err != nil || !anyContains(res.Notices, "add 'beads: true'") {
+		t.Fatalf("no beads notice: %v %v", err, res.Notices)
+	}
+	if got := readFile(t, filepath.Join(root, registry.Path)); got != before {
+		t.Error("existing registry rewritten")
 	}
 }
 

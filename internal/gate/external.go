@@ -79,7 +79,11 @@ func checkExternal(ctx *Context, k registry.Check) ([]Finding, error) {
 	}
 	var out []Finding
 	for _, l := range fresh {
-		out = append(out, Finding{Entry: entry, Message: l + suffix})
+		msg := l
+		if IsCloneDetector(k.ID) {
+			msg = CloneMessage(l)
+		}
+		out = append(out, Finding{Entry: entry, Message: msg + suffix})
 	}
 	return out, nil
 }
@@ -111,7 +115,8 @@ func SplitBaselined(root string, k registry.Check, lines []string) (fresh []stri
 }
 
 // RunExternal runs k's command (argv, no shell) in root and returns the
-// non-empty lines of its combined stdout and stderr. The returned error is
+// non-empty lines of its combined stdout and stderr (canonicalized for the
+// clone detectors, clones.go). The returned error is
 // a user-facing problem: command missing, timed out, or failed silently.
 // A non-zero exit with output is not an error; the output is the findings.
 func RunExternal(root string, k registry.Check) ([]string, error) {
@@ -148,12 +153,16 @@ func RunExternal(root string, k registry.Check) ([]string, error) {
 	if err != nil && len(lines) == 0 {
 		return nil, fmt.Errorf("check %s failed: %v", k.ID, exitErr.ProcessState)
 	}
+	if IsCloneDetector(k.ID) {
+		lines = cloneLines(k.ID, lines)
+	}
 	return lines, nil
 }
 
-// locRE matches "<path>:<line>" or "<path>:<line>:<col>", where the path
-// token contains a '.' or '/' so plain "12:30" times are left alone.
-var locRE = regexp.MustCompile(`([^\s:]*[./][^\s:]*):\d+(?::\d+)?\b`)
+// locRE matches "<path>:<line>", "<path>:<line>:<col>" or a line range
+// "<path>:<start>-<end>", where the path token contains a '.' or '/' so
+// plain "12:30" times are left alone.
+var locRE = regexp.MustCompile(`([^\s:]*[./][^\s:]*):\d+(?:[:-]\d+)?\b`)
 
 // Normalize returns the form of a finding compared against a baseline:
 // line and column numbers after paths stripped and whitespace collapsed,

@@ -253,7 +253,7 @@ func TestScanOutsideGit(t *testing.T) {
 }
 
 func TestSkeletonParsesWithDrafts(t *testing.T) {
-	text := skeleton(`we"ird`, []draft{{id: "a", name: "A", path: "a/**"}})
+	text := skeleton(`we"ird`, []draft{{id: "a", name: "A", path: "a/**"}}, false)
 	reg, err := registry.Parse([]byte(text))
 	if err != nil {
 		t.Fatal(err)

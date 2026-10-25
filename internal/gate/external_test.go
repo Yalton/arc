@@ -37,6 +37,7 @@ func TestNormalize(t *testing.T) {
 		"x.py:3:  unused   import 'os'":               "x.py: unused import 'os'",
 		"  src/b.ts:40 unused export":                 "src/b.ts unused export",
 		"took 12:30 to run":                           "took 12:30 to run",
+		"a/x.go:82-90: duplicate of b/y.go:5-13":      "a/x.go: duplicate of b/y.go",
 	} {
 		if got := Normalize(in); got != want {
 			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)

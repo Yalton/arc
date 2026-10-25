@@ -61,6 +61,9 @@ on:
   push:
     branches: [%[2]q]
   pull_request:
+    # labeled/unlabeled rerun the gate when a maintainer adds or removes
+    # arch-approved, which approves structural registry changes.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   gate:
@@ -79,6 +82,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
+          ARC_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'arch-approved') && '1' || '0' }}
         run: arc gate --base "origin/$BASE_REF"
       - name: arc gate (whole tree)
         if: github.event_name != 'pull_request'

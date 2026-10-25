@@ -43,18 +43,8 @@ The architecture registry is ` + "`" + Path + "`" + `; ` + "`" + ArchitectureFil
 `
 
 // beadsLine tells agents the bead template arc triage checks. It is part
-// of the snippet only in repositories that use beads.
+// of the snippet only when the registry sets beads: true.
 const beadsLine = "- When filing a bead, include `Replaces / removes:`, `Concepts touched:` (registry concept ids, comma-separated) and `Closest existing thing:` lines; `arc triage` checks them.\n"
-
-// BeadsDir marks a repository that uses beads.
-const BeadsDir = ".beads"
-
-// UsesBeads reports whether root has a beads workspace directory, which
-// adds the bead template line to the snippet.
-func UsesBeads(root string) bool {
-	fi, err := os.Stat(filepath.Join(root, BeadsDir))
-	return err == nil && fi.IsDir()
-}
 
 // Snippet returns the agent instruction block body; beads adds the bead
 // template line.
@@ -193,7 +183,9 @@ type planned struct {
 }
 
 // plan computes the desired content of every file render manages. Render
-// and Stale both use it, so they agree on the snippet for a given tree.
+// and Stale both use it, so they agree on the snippet for a given tree; the
+// content depends only on the registry and the managed files, never on
+// untracked state such as a .beads/ directory.
 func (r *Registry) plan(root string) ([]planned, error) {
 	var out []planned
 	add := func(rel, body, header string, create bool) error {
@@ -219,7 +211,7 @@ func (r *Registry) plan(root string) ([]planned, error) {
 	if err := add(ArchitectureFile, r.RenderArchitecture(), architectureHeader, true); err != nil {
 		return nil, err
 	}
-	body := Snippet(UsesBeads(root))
+	body := Snippet(r.Beads)
 	for i, f := range SnippetFiles {
 		if err := add(f, body, "", i == 0); err != nil {
 			return nil, err

@@ -95,25 +95,26 @@ func TestRenderBeadsLine(t *testing.T) {
 	}
 	data, _ := os.ReadFile(filepath.Join(root, "AGENTS.md"))
 	if strings.Contains(string(data), "Concepts touched") {
-		t.Fatalf("bead line without .beads:\n%s", data)
+		t.Fatalf("bead line without beads: true:\n%s", data)
 	}
-	// A .beads file is not a workspace; only the directory counts.
-	os.WriteFile(filepath.Join(root, ".beads"), nil, 0o644)
-	if stale, _ := r.IsStale(root); stale {
-		t.Fatal(".beads file must not change the snippet")
-	}
-	os.Remove(filepath.Join(root, ".beads"))
+	// An untracked .beads/ workspace must not change the output: a fresh
+	// clone (CI) has none, and render must agree with it.
 	os.Mkdir(filepath.Join(root, ".beads"), 0o755)
+	if stale, _ := r.IsStale(root); stale {
+		t.Fatal(".beads/ must not change the snippet; only the registry field does")
+	}
+	r.Beads = true
 	if s, _ := r.Stale(root); strings.Join(s, ",") != "AGENTS.md" {
-		t.Fatalf("stale = %v, want AGENTS.md once the repo uses beads", s)
+		t.Fatalf("stale = %v, want AGENTS.md once the registry sets beads: true", s)
 	}
 	if _, err := r.Render(root); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(filepath.Join(root, "AGENTS.md"))
 	golden(t, "AGENTS-beads.md", string(data))
+	os.Remove(filepath.Join(root, ".beads"))
 	if stale, _ := r.IsStale(root); stale {
-		t.Fatal("stale right after render")
+		t.Fatal("removing .beads/ made the beads snippet stale")
 	}
 }
 

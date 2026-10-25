@@ -31,6 +31,10 @@ type Registry struct {
 	Removals   []Removal  `yaml:"removals"`
 	Limits     Limits     `yaml:"limits"`
 	Checks     []Check    `yaml:"checks"`
+	// Beads marks a repository that tracks work in beads; the agent snippet
+	// then carries the bead template line. It is a registry field rather
+	// than a probe for .beads/ so rendering depends only on tracked files.
+	Beads bool `yaml:"beads"`
 }
 
 type System struct {

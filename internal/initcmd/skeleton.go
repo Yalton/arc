@@ -45,9 +45,10 @@ var defaultIgnore = []string{
 	"go.sum",
 }
 
-// skeleton returns the registry YAML for a fresh repository. It is written
+// skeleton returns the registry YAML for a fresh repository; beads sets
+// beads: true. It is written
 // as text, not marshalled, so the comments survive for human editors.
-func skeleton(name string, concepts []draft) string {
+func skeleton(name string, concepts []draft, beads bool) string {
 	var b strings.Builder
 	b.WriteString(`# arc architecture registry (SPEC.md, "Registry schema").
 # Source of truth for concepts, boundaries, flags and removals. After editing,
@@ -129,6 +130,10 @@ limits:
 #     command: ["staticcheck", "./..."]
 #     baseline: true
 checks: []
+
+# true when the repository tracks work in beads: the agent snippet then asks
+# for the bead fields 'arc triage' checks.
+beads: ` + strconv.FormatBool(beads) + `
 `)
 	return b.String()
 }

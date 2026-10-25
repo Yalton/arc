@@ -16,14 +16,14 @@ import (
 // Finding records how one init item was decided: by an explicit flag or by
 // detection, which reads only the repository, the PATH list and git config.
 type Finding struct {
-	Item   string `json:"item"`   // claude, codex, opencode, ci or scan
+	Item   string `json:"item"`   // a Detectable name
 	Value  string `json:"value"`  // on/off, or the CI provider or none
 	Source string `json:"source"` // "flag" or "detected"
 	Reason string `json:"reason"` // why, e.g. ".claude/ exists"
 }
 
 // Detectable lists the flag names Resolve can fill in, in report order.
-var Detectable = []string{"claude", "codex", "opencode", "ci", "scan"}
+var Detectable = []string{"claude", "codex", "opencode", "ci", "scan", "beads", "dupl", "jscpd"}
 
 // Resolve fills every item whose flag is not in explicit from detection and
 // returns the options to run with plus one Finding per item. pathList is a
@@ -49,6 +49,12 @@ func Resolve(root, pathList string, opts Options, explicit map[string]bool) (Opt
 				v = onOff(opts.Opencode)
 			case "scan":
 				v = onOff(opts.Scan)
+			case "beads":
+				v = onOff(opts.Beads)
+			case "dupl":
+				v = onOff(opts.Dupl)
+			case "jscpd":
+				v = onOff(opts.Jscpd)
 			case "ci":
 				v = opts.CI
 				if v == "" {
@@ -80,6 +86,15 @@ func Resolve(root, pathList string, opts Options, explicit map[string]bool) (Opt
 		case "scan":
 			on, why = detectScan(root)
 			opts.Scan = on
+		case "beads":
+			on, why = detectBeads(root)
+			opts.Beads = on
+		case "dupl":
+			on, why = detectClone(root, pathList, item)
+			opts.Dupl = on
+		case "jscpd":
+			on, why = detectClone(root, pathList, item)
+			opts.Jscpd = on
 		case "ci":
 			provider, why := detectCI(root)
 			opts.CI, opts.CIDetected = provider, provider != ""
@@ -145,6 +160,28 @@ func detectScan(root string) (bool, string) {
 		return false, "new registry but no files to scan"
 	}
 	return true, fmt.Sprintf("new registry and %d file(s) to scan", n)
+}
+
+// beadsDir is the beads workspace directory. Init reads it only to choose
+// what to write; render never does, since a fresh clone lacks it.
+const beadsDir = ".beads"
+
+func hasBeadsDir(root string) bool {
+	fi, err := os.Stat(filepath.Join(root, beadsDir))
+	return err == nil && fi.IsDir()
+}
+
+// detectBeads turns beads: true on for a new registry when the repository
+// has a beads workspace. An existing registry is never rewritten; Run then
+// prints a notice instead.
+func detectBeads(root string) (bool, string) {
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(registry.Path))); !errors.Is(err, os.ErrNotExist) {
+		return false, registry.Path + " exists"
+	}
+	if hasBeadsDir(root) {
+		return true, beadsDir + "/ exists"
+	}
+	return false, "no " + beadsDir + "/ directory"
 }
 
 func matchAny(patterns []string, f string) bool {

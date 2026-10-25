@@ -20,6 +20,9 @@ type Options struct {
 	Claude   bool // add arc's hooks to .claude/settings.json
 	Codex    bool // add arc's hooks to .codex/hooks.json
 	Opencode bool // install arc's plugin shim in .opencode/plugins/
+	Beads    bool // set beads: true in a new registry (the repository uses beads)
+	Dupl     bool // add the dupl clone check when the registry lacks it (clones.go)
+	Jscpd    bool // add the jscpd clone check when the registry lacks it
 
 	CI string // "github" or "gitea" ("none" or ""): write a CI workflow running arc gate (ci.go)
 	// CIDetected marks CI as chosen by detection rather than requested: an
@@ -56,6 +59,9 @@ func Run(root string, opts Options) (*Result, error) {
 	}
 	reg, err := ensureRegistry(root, opts, res)
 	if err != nil {
+		return res, err
+	}
+	if reg, err = ensureCloneChecks(root, reg, missingChecks(reg, wantedClones(opts)), res); err != nil {
 		return res, err
 	}
 	if err := ensureGitignore(root, res); err != nil {
@@ -101,7 +107,11 @@ func ensureRegistry(root string, opts Options, res *Result) (*registry.Registry,
 		if opts.Scan {
 			res.notice("--scan ignored: %s exists", registry.Path)
 		}
-		return registry.Load(root)
+		reg, err := registry.Load(root)
+		if err == nil && !reg.Beads && (opts.Beads || hasBeadsDir(root)) {
+			res.notice("the repository uses beads but %s does not set it; add 'beads: true' so the agent snippet asks for the bead fields 'arc triage' checks, then run 'arc render'", registry.Path)
+		}
+		return reg, err
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -118,7 +128,7 @@ func ensureRegistry(root string, opts Options, res *Result) (*registry.Registry,
 			res.notice("--scan left %d root-level file(s) unowned", rootFiles)
 		}
 	}
-	text := skeleton(systemName(root), concepts)
+	text := skeleton(systemName(root), concepts, opts.Beads)
 	reg, err := registry.Parse([]byte(text))
 	if err != nil {
 		return nil, fmt.Errorf("internal error: generated registry does not parse: %w", err)
