@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # labeled/unlabeled rerun the gate when arch-approved is added or removed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 jobs:
   test:
@@ -29,4 +31,6 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
+          # A maintainer approves structural registry changes with this label.
+          ARC_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'arch-approved') && '1' || '0' }}
         run: go run ./cmd/arc gate --base "origin/$BASE_REF"

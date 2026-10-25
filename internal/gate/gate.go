@@ -19,6 +19,7 @@ type Severity string
 const (
 	Error   Severity = "error"
 	Warning Severity = "warning"
+	Info    Severity = "info" // printed, never counted (e.g. a skipped check)
 )
 
 // Finding is one problem a check reports. Entry names the registry entry
@@ -41,8 +42,8 @@ func (f Finding) String() string {
 		loc = f.Path + ": "
 	}
 	sev := ""
-	if f.Severity == Warning {
-		sev = "warning: "
+	if f.Severity == Warning || f.Severity == Info {
+		sev = string(f.Severity) + ": "
 	}
 	return fmt.Sprintf("[%s] %s%s%s", f.Check, sev, loc, f.Message)
 }
@@ -51,12 +52,16 @@ func (f Finding) String() string {
 type Context struct {
 	Root    string
 	Reg     *registry.Registry
-	Files   []string           // every repository file (registry.RepoFiles)
-	Changes *gitx.ChangeSet    // the change set; with All, every file as added
-	All     bool               // judging the whole tree, not a diff
-	Staged  bool               // file contents come from the index
-	BaseReg *registry.Registry // registry at the comparison point; nil if none or All
-	Now     time.Time
+	Files   []string        // every repository file (registry.RepoFiles)
+	Changes *gitx.ChangeSet // the change set; with All, every file as added
+	All     bool            // judging the whole tree, not a diff
+	Base    bool            // judging a diff against --base (CI on pull requests)
+	// Approved is set when a maintainer approved structural registry
+	// changes (ARC_APPROVED=1, from the arch-approved label in CI).
+	Approved bool
+	Staged   bool               // file contents come from the index
+	BaseReg  *registry.Registry // registry at the comparison point; nil if none or All
+	Now      time.Time
 }
 
 // ReadFile returns the content checks should judge for a changed file: the
@@ -95,6 +100,7 @@ var Checks = []Check{
 	{"structure", checkStructure},
 	{"boundaries", checkBoundaries},
 	{"reasons", checkReasons},
+	{"approval", checkApproval},
 	{"flags", checkFlags},
 	{"removals", checkRemovals},
 	{"size", checkSize},
@@ -130,9 +136,10 @@ func Run(ctx *Context, only []string) (*Report, error) {
 			if f.Severity == "" {
 				f.Severity = Error
 			}
-			if f.Severity == Error {
+			switch f.Severity {
+			case Error:
 				rep.Errors++
-			} else {
+			case Warning:
 				rep.Warnings++
 			}
 			rep.Findings = append(rep.Findings, f)

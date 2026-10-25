@@ -21,7 +21,7 @@ the section.
 
 | Concept | Owns paths | Storage | Env | Summary |
 |---|---|---|---|---|
-| cli (CLI) | `cmd/arc/**` |  | PATH | Command-line entry point; flag parsing, dispatch, text and --json output, exit codes. *Why:* One place for argument parsing and output so behaviour stays testable in internal packages. |
+| cli (CLI) | `cmd/arc/**` |  | PATH, ARC_APPROVED | Command-line entry point; flag parsing, dispatch, text and --json output, exit codes. *Why:* One place for argument parsing and output so behaviour stays testable in internal packages. |
 | registry (Registry) | `internal/registry/**` |  |  | Schema, load, validation, glob ownership and rendering of .arch/registry.yaml. *Why:* The registry is the single source of truth; every command reads it through one loader and validator. |
 | gitx (Git access) | `internal/gitx/**` |  |  | Repository root, file lists and change sets, by shelling out to git. *Why:* All git access in one place, shelling out instead of a git library (SPEC principle 5). |
 | gate (Gate) | `internal/gate/**` |  |  | Deterministic checks over a change set for pre-commit and CI, one file per check. *Why:* The enforcement point for pre-commit and CI; checks share one change-set model. |

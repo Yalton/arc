@@ -172,3 +172,43 @@ func anyContains(list []string, sub string) bool {
 	}
 	return false
 }
+
+// TestCIWorkflowApproval pins how the arch-approved label reaches arc gate:
+// label events rerun the workflow, and ARC_APPROVED comes from the label
+// through env on the pull request step only.
+func TestCIWorkflowApproval(t *testing.T) {
+	for provider := range ciPaths {
+		var wf struct {
+			On struct {
+				PullRequest struct {
+					Types []string `yaml:"types"`
+				} `yaml:"pull_request"`
+			} `yaml:"on"`
+			Jobs map[string]struct {
+				Steps []struct {
+					Name string            `yaml:"name"`
+					Env  map[string]string `yaml:"env"`
+				} `yaml:"steps"`
+			} `yaml:"jobs"`
+		}
+		text := strings.Replace(ciWorkflow, "%[2]q", `"main"`, 1)
+		if err := yaml.Unmarshal([]byte(text), &wf); err != nil {
+			t.Fatalf("%s: %v", provider, err)
+		}
+		if want := []string{"opened", "synchronize", "reopened", "labeled", "unlabeled"}; !reflect.DeepEqual(wf.On.PullRequest.Types, want) {
+			t.Errorf("%s: pull_request types = %v, want %v", provider, wf.On.PullRequest.Types, want)
+		}
+		var steps []string
+		for _, s := range wf.Jobs["gate"].Steps {
+			if v, ok := s.Env["ARC_APPROVED"]; ok {
+				steps = append(steps, s.Name)
+				if !strings.Contains(v, "contains(github.event.pull_request.labels.*.name, 'arch-approved')") {
+					t.Errorf("%s: ARC_APPROVED = %q", provider, v)
+				}
+			}
+		}
+		if !reflect.DeepEqual(steps, []string{"arc gate (pull request)"}) {
+			t.Errorf("%s: ARC_APPROVED set on steps %v", provider, steps)
+		}
+	}
+}

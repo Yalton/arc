@@ -192,8 +192,9 @@ without arc's marker is left alone with a notice instead of failing init.
 
 `--ci github|gitea` writes `.github/workflows/arc.yml` or
 `.gitea/workflows/arc.yml` (Forgejo reads `.gitea/` too): `arc gate --base
-origin/<target>` on pull requests and `arc gate --all` on pushes to the
-default branch (`origin/HEAD`, else `main`), checking out with full history.
+origin/<target>` on pull requests (with `ARC_APPROVED` from the
+`arch-approved` label, rerun on label changes; see `approval`) and `arc gate
+--all` on pushes to the default branch (`origin/HEAD`, else `main`), checking out with full history.
 The workflow installs arc with `actions/setup-go` and `go install
 github.com/Yalton/arc/cmd/arc@<version>`, pinned to the version of the arc
 that wrote it; when that arc is not a release build (`dev`, a
@@ -250,7 +251,30 @@ them and points to `place`/`brief`); giving two mode flags is also exit 2.
 | `size` | a changed file exceeds `file_lines`, or a changed Go function exceeds `function_lines` |
 | `checks.*` | an external command reports a finding not in its baseline (compared as a multiset: a finding fails when its normalized form occurs more times than in the baseline) |
 | `reasons` | the change adds a non-draft concept (or turns a draft into one) without a `reason`; skipped when the comparison point has no registry (adoption); with `--all`, every non-draft concept needs one |
+| `approval` | `--base` only: the registry change is structural (below) and the pull request lacks the `arch-approved` label |
 | `drafts` | warning only: draft concepts exist |
+
+`approval` compares the registry at the merge base with the head and fails
+each structural change with `needs human approval: <change>. A maintainer
+approves by adding the arch-approved label to the pull request.` Structural
+changes: an added concept, or a draft promoted to a concept; a removed
+boundary, or one whose `deny` no longer covers a file it covered or whose
+`from` now covers a file it did not; a rule removed from a concept (also by
+removing the concept); a flag's `expires` or a removal's `remove_by` moved
+later; a concept whose `paths` now own a file they did not. Coverage is
+judged on the files in the head tree. The check runs only with `--base` and
+only when the base has a registry (adoption is not judged); pre-commit,
+`--staged`, working and `--all` modes skip it, so local agents can still
+propose such changes. With `ARC_APPROVED=1` it is skipped with an info line,
+which is printed but counted as neither error nor warning. The CI workflows
+set `ARC_APPROVED` through `env` from
+`contains(github.event.pull_request.labels.*.name, 'arch-approved')` and
+trigger on `pull_request` types `opened`, `synchronize`, `reopened`,
+`labeled` and `unlabeled`, so adding or removing the label reruns the gate.
+Gitea and Forgejo runners evaluate expressions with act, which supports
+`contains()` and the `.*` object filter, and their `pull_request` payload
+carries `labels`; this is read from the runner source and docs, not tested
+on a live instance.
 
 Pre-existing violations in untouched files do not fail `placement`, `size`
 or `boundaries`; only the change set is judged. `arc gate --all` judges the

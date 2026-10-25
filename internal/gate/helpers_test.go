@@ -89,6 +89,7 @@ func (r *testRepo) gate(mode string, only ...string) *Report {
 		ctx.All = true
 		ctx.Changes, err = WholeTree(r.root, files)
 	default:
+		ctx.Base = true
 		ctx.Changes, err = gitx.BaseChangeSet(r.root, mode)
 		if err == nil {
 			baseRev, err = gitx.MergeBase(r.root, mode)

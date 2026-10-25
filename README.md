@@ -52,6 +52,10 @@ calls a model.
 - A CI workflow from the `origin` remote: `.github/workflows/arc.yml` for
   GitHub, `.gitea/workflows/arc.yml` for Gitea or Forgejo. It installs the same
   arc version with `go install` and needs no secrets.
+  On pull requests, structural registry changes (a new concept, a loosened
+  boundary, a removed rule, a later deadline, wider concept paths) fail until
+  a maintainer adds the `arch-approved` label, so an agent cannot approve its
+  own architecture change.
 
 Any item can be turned off or forced: `--claude=false`, `--codex=false`,
 `--opencode=false`, `--scan=false`, `--beads=false`, `--ci none|github|gitea`. `--no-detect`

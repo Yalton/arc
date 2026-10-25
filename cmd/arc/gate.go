@@ -55,7 +55,8 @@ func runGate(out *output, args []string) int {
 	if err != nil {
 		return out.fail(exitUsage, err.Error())
 	}
-	ctx := &gate.Context{Root: r.root, Reg: r.reg, Files: r.files, All: *all, Staged: *staged, Now: time.Now().UTC()}
+	ctx := &gate.Context{Root: r.root, Reg: r.reg, Files: r.files, All: *all, Staged: *staged,
+		Base: *base != "", Approved: os.Getenv(gate.ApprovedEnv) == "1", Now: time.Now().UTC()}
 	baseRev := "HEAD" // where the registry is compared from (reasons check)
 	switch {
 	case *base != "":

@@ -45,7 +45,9 @@ concepts:
     summary: Command-line entry point; flag parsing, dispatch, text and --json output, exit codes.
     paths: ["cmd/arc/**"]
     aliases: [command, flag, output, exit code]
-    env: [PATH] # arc init searches it for harness CLIs to detect (internal/initcmd/detect.go)
+    env:
+      - PATH # arc init searches it for harness CLIs to detect (internal/initcmd/detect.go)
+      - ARC_APPROVED # set to 1 by CI from the arch-approved PR label; gate's approval check passes (internal/gate/approval.go)
     reason: One place for argument parsing and output so behaviour stays testable in internal packages.
     rules:
       - Only parsing and presentation here; behaviour lives in internal packages.
