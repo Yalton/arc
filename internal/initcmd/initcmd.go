@@ -21,15 +21,19 @@ type Options struct {
 	Codex    bool // add arc's hooks to .codex/hooks.json
 	Opencode bool // install arc's plugin shim in .opencode/plugins/
 
-	CI string // "github" or "gitea": write a CI workflow running arc gate (ci.go)
+	CI string // "github" or "gitea" ("none" or ""): write a CI workflow running arc gate (ci.go)
+	// CIDetected marks CI as chosen by detection rather than requested: an
+	// existing workflow arc does not manage is then a notice, not an error.
+	CIDetected bool
 }
 
 // Result lists what Run did. Paths are repo-relative and slash-separated
 // (a hooks directory outside the repository is reported absolute).
 type Result struct {
-	Created []string `json:"created"`
-	Updated []string `json:"updated"`
-	Notices []string `json:"notices"`
+	Detected []Finding `json:"detected"` // how each item was decided (Resolve); set by the caller
+	Created  []string  `json:"created"`
+	Updated  []string  `json:"updated"`
+	Notices  []string  `json:"notices"`
 }
 
 func (r *Result) created(p string) { r.Created = append(r.Created, p) }
@@ -43,7 +47,10 @@ const gitignorePath = ".arch/.gitignore"
 
 // Run initializes arc in the repository at root.
 func Run(root string, opts Options) (*Result, error) {
-	res := &Result{Created: []string{}, Updated: []string{}, Notices: []string{}}
+	res := &Result{Detected: []Finding{}, Created: []string{}, Updated: []string{}, Notices: []string{}}
+	if opts.CI == "none" {
+		opts.CI = ""
+	}
 	if err := checkCI(opts.CI); err != nil {
 		return res, err
 	}
@@ -76,7 +83,9 @@ func Run(root string, opts Options) (*Result, error) {
 		}
 	}
 	if opts.CI != "" {
-		if err := ensureCI(root, opts.CI, res); err != nil {
+		if rel, foreign := foreignCI(root, opts.CI); opts.CIDetected && foreign {
+			res.notice("%s exists and is not managed by arc; CI left unchanged (move it aside and rerun, or add the arc gate steps by hand)", rel)
+		} else if err := ensureCI(root, opts.CI, res); err != nil {
 			return res, err
 		}
 	}

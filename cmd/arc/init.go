@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/Yalton/arc/internal/initcmd"
@@ -16,7 +17,8 @@ func runInit(out *output, args []string) int {
 	fs.BoolVar(&opts.Claude, "claude", false, "install the Claude Code hook adapter")
 	fs.BoolVar(&opts.Codex, "codex", false, "install the Codex hook adapter")
 	fs.BoolVar(&opts.Opencode, "opencode", false, "install the opencode plugin shim")
-	fs.StringVar(&opts.CI, "ci", "", "write a CI workflow running arc gate: github or gitea")
+	fs.StringVar(&opts.CI, "ci", "", "write a CI workflow running arc gate: github, gitea or none")
+	noDetect := fs.Bool("no-detect", false, "apply only the flags given; detect nothing")
 	if err := fs.Parse(args); err != nil {
 		return out.fail(exitUsage, "init: "+err.Error())
 	}
@@ -27,11 +29,23 @@ func runInit(out *output, args []string) int {
 	if err != nil {
 		return out.fail(exitUsage, err.Error())
 	}
+	var found []initcmd.Finding
+	if !*noDetect {
+		explicit := map[string]bool{}
+		fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+		opts, found = initcmd.Resolve(root, os.Getenv("PATH"), opts, explicit)
+	}
 	res, err := initcmd.Run(root, opts)
 	if err != nil {
 		return out.fail(exitUsage, "init: "+err.Error())
 	}
+	if found != nil {
+		res.Detected = found
+	}
 	var b strings.Builder
+	for _, f := range found {
+		b.WriteString(findingLine(f) + "\n")
+	}
 	for _, p := range res.Created {
 		b.WriteString("created " + p + "\n")
 	}
@@ -46,4 +60,18 @@ func runInit(out *output, args []string) int {
 	}
 	out.result(strings.TrimRight(b.String(), "\n"), res)
 	return exitOK
+}
+
+// findingLine renders one detection result, e.g.
+// "detected claude: .claude/ exists" or "flag ci: none (--ci none)".
+func findingLine(f initcmd.Finding) string {
+	switch {
+	case f.Source == "flag":
+		return "flag " + f.Item + ": " + f.Value + " (" + f.Reason + ")"
+	case f.Value == "off" || f.Value == "none":
+		return "not detected " + f.Item + ": " + f.Reason
+	case f.Value == "on":
+		return "detected " + f.Item + ": " + f.Reason
+	}
+	return "detected " + f.Item + " " + f.Value + ": " + f.Reason
 }
