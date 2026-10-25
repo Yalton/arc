@@ -17,6 +17,7 @@ import (
 	"github.com/Yalton/arc/internal/brief"
 	"github.com/Yalton/arc/internal/gitx"
 	"github.com/Yalton/arc/internal/registry"
+	"github.com/Yalton/arc/internal/symbols"
 )
 
 type Kind int
@@ -92,32 +93,78 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		return Decision{}, err
 	}
 
-	var concepts []string
+	var concepts, created []string
 	for _, p := range abs {
 		rel, ok := gitx.Rel(root, p)
 		if !ok {
 			continue // outside the repository
 		}
 		res := brief.Place(reg, rel)
+		_, statErr := os.Stat(p)
+		isNew := errors.Is(statErr, os.ErrNotExist)
 		switch res.Status {
 		case brief.StatusUnowned:
-			if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
+			if isNew {
 				return Decision{Deny: true, Reason: "arc: " + brief.PlaceMessage(res) +
 					" Run 'arc place " + rel + "' to check a path."}, nil
 			}
 		case brief.StatusOwned:
 			concepts = appendUnique(concepts, res.Concept)
+			if isNew {
+				created = appendUnique(created, res.Concept)
+			}
 		}
 	}
 	fresh, err := markSeen(root, ev.SessionID, concepts)
-	if err != nil || len(fresh) == 0 {
-		return Decision{}, err
-	}
-	b, err := brief.ForConcepts(reg, fresh, now)
 	if err != nil {
 		return Decision{}, err
 	}
-	return Decision{Context: "arc architecture brief for the code you are editing:\n" + b.Text()}, nil
+	// A new file is where duplication starts, so creating one repeats what
+	// its concept provides even when the concept was briefed already.
+	var again []string
+	for _, c := range created {
+		if !contains(fresh, c) {
+			again = append(again, c)
+		}
+	}
+	if len(fresh) == 0 && len(again) == 0 {
+		return Decision{}, nil
+	}
+	files, err := registry.RepoFiles(root)
+	if err != nil {
+		return Decision{}, err
+	}
+	ids := map[string]bool{}
+	for _, c := range append(append([]string(nil), fresh...), again...) {
+		ids[c] = true
+	}
+	provides, err := symbols.ByConcept(reg, root, files, ids)
+	if err != nil {
+		return Decision{}, err
+	}
+	var parts []string
+	if len(fresh) > 0 {
+		b, err := brief.ForConcepts(reg, fresh, now)
+		if err != nil {
+			return Decision{}, err
+		}
+		b.AddProvides(provides)
+		parts = append(parts, "arc architecture brief for the code you are editing:\n"+b.Text())
+	}
+	if len(again) > 0 {
+		b, err := brief.ForConcepts(reg, again, now)
+		if err != nil {
+			return Decision{}, err
+		}
+		b.AddProvides(provides)
+		if t := b.ProvidesText(); t != "" {
+			parts = append(parts, "arc: you are creating a new file; check what its concept already provides ('arc find <words>' searches all concepts):\n"+t)
+		}
+	}
+	if len(parts) == 0 {
+		return Decision{}, nil
+	}
+	return Decision{Context: strings.Join(parts, "")}, nil
 }
 
 // isBdCreate reports whether command line cmd runs 'bd create' as a

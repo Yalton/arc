@@ -2,15 +2,24 @@ package brief
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Yalton/arc/internal/registry"
+	"github.com/Yalton/arc/internal/symbols"
 )
 
 // WholeTokenBudget is the target size of the no-argument brief; callers warn
 // when Whole(...).Tokens() exceeds it.
 const WholeTokenBudget = 4000
+
+// MaxProvides caps the symbols Text lists per concept; JSON has them all.
+const MaxProvides = 25
+
+// wholeNote points from the whole-registry view, which omits provides, to
+// the per-path brief that lists them.
+const wholeNote = "Run 'arc brief <path>' for what the owning concept already provides, or 'arc find <words>' to search all of it."
 
 // Brief is the agent-facing context for a scope. Entries keep registry order.
 type Brief struct {
@@ -21,6 +30,7 @@ type Brief struct {
 	Boundaries []BoundaryEntry `json:"boundaries,omitempty"`
 	Flags      []FlagEntry     `json:"flags,omitempty"`
 	Removals   []RemovalEntry  `json:"removals,omitempty"`
+	Note       string          `json:"note,omitempty"`
 }
 
 type NonGoalEntry struct {
@@ -29,7 +39,7 @@ type NonGoalEntry struct {
 }
 
 // ConceptEntry is a concept as shown to agents. Paths is filled only in the
-// whole-registry view.
+// whole-registry view; Provides only by AddProvides.
 type ConceptEntry struct {
 	ID      string   `json:"id"`
 	Name    string   `json:"name,omitempty"`
@@ -40,6 +50,8 @@ type ConceptEntry struct {
 	Rules   []string `json:"rules,omitempty"`
 	Reason  string   `json:"reason,omitempty"`
 	Draft   bool     `json:"draft,omitempty"`
+	// Provides is the exported API of the concept's files (symbols.ByConcept).
+	Provides []symbols.Symbol `json:"provides,omitempty"`
 }
 
 type BoundaryEntry struct {
@@ -124,10 +136,30 @@ func ForConcepts(reg *registry.Registry, ids []string, now time.Time) (Brief, er
 	return b, nil
 }
 
+// ConceptIDs returns the ids of the briefed concepts, as a set.
+func (b Brief) ConceptIDs() map[string]bool {
+	ids := map[string]bool{}
+	for _, c := range b.Concepts {
+		ids[c.ID] = true
+	}
+	return ids
+}
+
+// AddProvides attaches each concept's symbols (keyed by concept id, as
+// symbols.ByConcept returns them) to its entry.
+func (b *Brief) AddProvides(by map[string][]symbols.Symbol) {
+	for i := range b.Concepts {
+		b.Concepts[i].Provides = by[b.Concepts[i].ID]
+	}
+}
+
 // Whole is the compact always-loaded view of the entire registry: every
 // concept with its paths, every boundary, active flags and all removals.
+// It omits provides to stay within WholeTokenBudget; Note points to the
+// per-path brief instead.
 func Whole(reg *registry.Registry, now time.Time) Brief {
 	b := header(reg)
+	b.Note = wholeNote
 	all := map[string]bool{}
 	for _, c := range reg.Concepts {
 		all[c.ID] = true
@@ -197,7 +229,85 @@ func (b Brief) Text() string {
 			fmt.Fprintf(&w, "- %s: %s (%s)\n", r.ID, r.What, joinNonEmpty(repl, by, r.Bead))
 		}
 	}
+	if b.Note != "" {
+		w.WriteString(b.Note + "\n")
+	}
 	return w.String()
+}
+
+// ProvidesText renders only what each concept provides, for context about
+// a concept already briefed.
+func (b Brief) ProvidesText() string {
+	var w strings.Builder
+	for _, c := range b.Concepts {
+		if len(c.Provides) > 0 {
+			fmt.Fprintf(&w, "Concept %s", c.ID)
+			writeProvides(&w, c.Provides)
+		}
+	}
+	return w.String()
+}
+
+// writeProvides lists up to MaxProvides symbol names grouped by file.
+// When it has to cut, it takes names from each file in turn (in source
+// order), top-level names before methods, so every file stays visible.
+func writeProvides(w *strings.Builder, syms []symbols.Symbol) {
+	shown := pickProvides(syms, MaxProvides)
+	more := len(syms) - len(shown)
+	byFile := map[string][]string{}
+	var files []string
+	for _, s := range shown {
+		if byFile[s.File] == nil {
+			files = append(files, s.File)
+		}
+		byFile[s.File] = append(byFile[s.File], s.Name)
+	}
+	sort.Strings(files)
+	w.WriteString(" provides (extend these before adding new code):\n")
+	for _, f := range files {
+		names := byFile[f]
+		sort.Strings(names)
+		fmt.Fprintf(w, "    %s: %s\n", f, strings.Join(names, ", "))
+	}
+	if more > 0 {
+		fmt.Fprintf(w, "    +%d more; arc brief --json lists all\n", more)
+	}
+}
+
+// pickProvides returns up to max of syms, round-robin over files in path
+// order: first top-level names, then methods.
+func pickProvides(syms []symbols.Symbol, max int) []symbols.Symbol {
+	if len(syms) <= max {
+		return syms
+	}
+	sorted := append([]symbols.Symbol(nil), syms...)
+	symbols.Sort(sorted)
+	var out []symbols.Symbol
+	for _, methods := range []bool{false, true} {
+		queues := map[string][]symbols.Symbol{}
+		var files []string
+		for _, s := range sorted {
+			if (s.Kind == symbols.KindMethod) != methods {
+				continue
+			}
+			if queues[s.File] == nil {
+				files = append(files, s.File)
+			}
+			queues[s.File] = append(queues[s.File], s)
+		}
+		for left := true; left; {
+			left = false
+			for _, f := range files {
+				if len(out) == max {
+					return out
+				}
+				if q := queues[f]; len(q) > 0 {
+					out, queues[f], left = append(out, q[0]), q[1:], true
+				}
+			}
+		}
+	}
+	return out
 }
 
 func writeConcept(w *strings.Builder, c ConceptEntry) {
@@ -225,6 +335,10 @@ func writeConcept(w *strings.Builder, c ConceptEntry) {
 	}
 	for _, r := range c.Rules {
 		fmt.Fprintf(w, "  - %s\n", oneLine(r))
+	}
+	if len(c.Provides) > 0 {
+		w.WriteString(" ")
+		writeProvides(w, c.Provides)
 	}
 }
 

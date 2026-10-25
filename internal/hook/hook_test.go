@@ -85,6 +85,26 @@ func TestDecideOwnedContextOncePerSession(t *testing.T) {
 	}
 }
 
+func TestDecideNewFileRepeatsProvides(t *testing.T) {
+	root := newRepo(t)
+	write(t, root, "internal/goal/goal.go", "package goal\n\n// NewGoal makes a goal.\nfunc NewGoal() {}\n")
+	d := Decide(pre(root, "s1", "internal/goal/goal.go"), now)
+	if !strings.Contains(d.Context, "Goals are work nodes.") || !strings.Contains(d.Context, "internal/goal/goal.go: NewGoal") {
+		t.Fatalf("first brief must list provides: %+v", d)
+	}
+	// Briefed already: editing an existing file adds nothing...
+	if d := Decide(pre(root, "s1", "internal/goal/goal.go"), now); d.Context != "" {
+		t.Fatalf("edit: %+v", d)
+	}
+	// ...but creating a file repeats what the concept provides, without
+	// the rest of the brief.
+	d = Decide(pre(root, "s1", "internal/goal/other.go"), now)
+	if !strings.Contains(d.Context, "creating a new file") || !strings.Contains(d.Context, "NewGoal") ||
+		strings.Contains(d.Context, "Goals are work nodes.") {
+		t.Fatalf("new file: %+v", d)
+	}
+}
+
 func TestDecideIgnoredAndOutside(t *testing.T) {
 	root := newRepo(t)
 	if d := Decide(pre(root, "s1", "internal/foo/x_test.go"), now); d != (Decision{}) {

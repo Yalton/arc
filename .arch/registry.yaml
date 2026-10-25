@@ -102,6 +102,17 @@ concepts:
     rules:
       - Keep a one-concept brief under 1,500 tokens and the whole registry under 4,000.
 
+  - id: symbols
+    name: Symbols
+    summary: Exported symbols per file and concept (Go via go/parser, Python and TS/JS by line scanning), shown as what a concept provides, and arc find's ranked search over them and the registry.
+    paths: ["internal/symbols/**"]
+    aliases: [symbol, provides, exported, api, find, search]
+    reason: Agents rebuild code mostly because they do not know it exists; one extractor feeds brief, hook, find and triage.
+    rules:
+      - Deterministic and read-only; never fail on unparseable source, keep what was read.
+      - Exported names only; skip test files and registry-ignored paths.
+      - Search scoring is plain token matching with fixed weights; no embeddings or models.
+
   - id: initcmd
     name: Init
     summary: arc init — registry skeleton, --scan drafts, render, pre-commit hook and harness setup.

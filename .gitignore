@@ -10,3 +10,11 @@
 .claude/settings.local.json
 .claude/.headroom_*
 .serena/
+
+# Personal agent tooling (beads setup and harness configs); kept locally,
+# not shipped with arc.
+.agents/
+.beads/
+.claude/
+.codex/
+.cursor/

@@ -17,7 +17,7 @@ import (
 var version string
 
 var commands = []string{
-	"init", "place", "brief", "gate", "baseline", "render",
+	"init", "place", "brief", "find", "gate", "baseline", "render",
 	"hook", "triage", "audit", "validate", "version",
 }
 
@@ -27,6 +27,7 @@ var handlers = map[string]func(*output, []string) int{
 	"audit":    runAudit,
 	"baseline": runBaseline,
 	"brief":    runBrief,
+	"find":     runFind,
 	"hook":     runHook,
 	"init":     runInit,
 	"place":    runPlace,

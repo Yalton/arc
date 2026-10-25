@@ -116,3 +116,4 @@ Removals:
 - old-a: legacy a (replaced by alpha, remove by 2026-01-14 OVERDUE, t-1)
 - later:  (remove by 2027-01-01, t-2)
 - done:  (remove by 2026-01-01 OVERDUE)
+Run 'arc brief <path>' for what the owning concept already provides, or 'arc find <words>' to search all of it.

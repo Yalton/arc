@@ -5,7 +5,8 @@ single deterministic CLI (Go, one static binary) that reads a per-repo
 architecture registry and:
 
 - tells an agent, cheaply and at the moment it matters, which concept owns the
-  code it is touching (`brief`, `place`, harness hooks);
+  code it is touching and what already exists (`brief`, `place`, `find`,
+  harness hooks);
 - fails commits and CI when new structure lands without a registry entry, when
   boundaries are crossed, when flags or scheduled removals expire, or when dead
   code or oversized code is added (`gate`);
@@ -240,13 +241,46 @@ Prints the agent-facing context for the given scope, sized to stay small
 (target under 1,500 tokens for one concept):
 
 - system summary (one line), relevant non-goals;
-- each owning concept: summary, rules, storage, env;
+- each owning concept: summary, rules, storage, env, and what it already
+  provides: the exported symbols of its non-ignored, non-test files (Go
+  exported funcs, types, consts, vars and methods as `Type.Method`; Python
+  top-level `def`/`class` not starting with `_`; TS/JS `export`ed
+  function, class, const/let/var, interface, type and enum), with the first
+  sentence of each doc comment or docstring. Text lists up to 25 names per
+  concept grouped by file, methods cut first, then `+N more`; `--json` has
+  every symbol with kind, doc, file and line;
 - boundaries whose `from` matches the paths;
 - active flags and pending removals touching those concepts.
 
 With no arguments, prints the whole registry in compact form (the
-"always-loaded" view, target under 4,000 tokens; warns if exceeded).
+"always-loaded" view, target under 4,000 tokens; warns if exceeded). It
+omits provides and ends with a line pointing to `arc brief <path>` and
+`arc find` for them.
 `--bead` resolves concepts from the bead's text via aliases and paths.
+
+### `arc find <words>...`
+
+Ranks concepts and exported symbols (the provides of `arc brief`) against
+the words, so an agent checks for existing code before planning new code.
+Deterministic: words are lowercased, split at camelCase and `snake_case`,
+stopwords dropped and crudely stemmed (`s`/`es`/`ies`, `ing`, `ed`, a final
+`e`), so `parsing labels` meets `parseLabel`. Each query word scores once,
+at the best field it matches; an exact token match counts in full, a prefix
+match (shorter token at least 4 letters) half:
+
+| Target | Field | Weight |
+|---|---|---|
+| symbol | name | 6 |
+| symbol | doc | 3 |
+| symbol | file path segments | 2 |
+| concept | id, name, aliases | 6 |
+| concept | summary, reason, rules | 2 |
+
+Prints up to 3 concepts by score (then registry order) with why they
+matched (`label (alias)`), then up to 10 symbols by score, then shorter
+name, file and line, as `file:line Name - doc (concept)`; symbols under a
+third of the best score are dropped. Exit 0 with results, 1 when nothing
+matches, 2 with no words.
 
 ### `arc gate [--base <ref> | --staged | --all] [--only <check>...]`
 
@@ -320,7 +354,9 @@ to check that the check is configured right.
 ### `arc render`
 
 Rewrites the rendered block in `ARCHITECTURE.md` and the snippet in
-`AGENTS.md`/`CLAUDE.md`. When the registry sets `beads: true`, the snippet
+`AGENTS.md`/`CLAUDE.md`. The snippet tells agents to run `arc brief` before
+feature work and `arc find <what you need>` before adding a new file,
+package or concept. When the registry sets `beads: true`, the snippet
 gains a line telling agents to give new beads the `triage` template fields,
 with `Concepts touched` listing registry concept ids separated by commas.
 Output depends only on tracked files (the registry and the managed files),
@@ -334,7 +370,9 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
 - **Before a file write/edit:** if the target is unowned and new, deny with
   the `place` message. Otherwise allow and attach `brief <path>` as added
   context, once per concept per session (session id from the payload; state
-  in `.arch/cache/`).
+  in `.arch/cache/`). Creating a new file in an owned concept that was
+  already briefed this session attaches that concept's provides again
+  (a new file is where duplication starts).
 - **After a shell command that ran `bd create`:** run `triage` on the new
   bead and return its result as added context. `bd create` must be a
   command (start of the line or after an unquoted `;`, `&`, `|`, newline or
@@ -360,6 +398,12 @@ For each bead (`--new`: open beads without an `arch:*` label):
 2. Concepts resolved from the text (aliases, paths); the brief is appended as
    a bead note.
 3. Non-goal keywords matched.
+   When `Closest existing thing` is missing or `none`, the title and
+   description are searched as `arc find` does; a symbol whose name has at
+   least two words (for a method, ignoring the receiver type), all present
+   in that text, is strong evidence, and up to 3 such symbols give
+   `arch:review` with the reason `existing code may already cover this:
+   <file:line Name>, ...`.
 4. Labels: `arch:ok` if fields are present, at least one concept resolved and
    no non-goal matched; otherwise `arch:review` with a note giving the
    reasons. Beads that name a concept not in the registry get `arch:review`,
@@ -415,6 +459,7 @@ internal/gitx/      diff, staged set, history stats
 internal/gate/      one file per check
 internal/imports/   import extraction: go, python, ts/js
 internal/brief/     brief and place
+internal/symbols/   exported symbol extraction (go, python, ts/js) and find
 internal/initcmd/   arc init: scaffold, --scan, hooks, adapters
 internal/hook/      harness payload adapters (claude, codex, opencode)
 internal/beads/     bd CLI wrapper
