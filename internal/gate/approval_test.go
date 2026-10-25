@@ -40,6 +40,11 @@ var approvalFiles = []string{
 
 func approve(t *testing.T, head string, approved bool) []Finding {
 	t.Helper()
+	return approveFrom(t, approvalBase, head, approved)
+}
+
+func approveFrom(t *testing.T, base, head string, approved bool) []Finding {
+	t.Helper()
 	parse := func(s string) *registry.Registry {
 		r, err := registry.Parse([]byte(s))
 		if err != nil {
@@ -47,7 +52,7 @@ func approve(t *testing.T, head string, approved bool) []Finding {
 		}
 		return r
 	}
-	ctx := &Context{Reg: parse(head), BaseReg: parse(approvalBase), Files: approvalFiles, Base: true, Approved: approved}
+	ctx := &Context{Reg: parse(head), BaseReg: parse(base), Files: approvalFiles, Base: true, Approved: approved}
 	fs, err := checkApproval(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -163,5 +168,46 @@ func TestInfoFindingsAreNotCounted(t *testing.T) {
 	rep, err := Run(ctx, []string{"approval"})
 	if err != nil || rep.Errors != 0 || rep.Warnings != 0 || len(rep.Findings) != 1 {
 		t.Fatalf("rep %+v err %v", rep, err)
+	}
+}
+
+func TestApprovalReportsLoosenedIgnoreAndLimits(t *testing.T) {
+	base := approvalBase + `ignore: ["internal/idea/**"]
+limits: {file_lines: 400, function_lines: 60}
+`
+	entries := func(head string) []string {
+		var got []string
+		for _, f := range approveFrom(t, base, head, false) {
+			got = append(got, f.Entry+" | "+strings.TrimPrefix(strings.SplitN(f.Message, ". A maintainer", 2)[0], "needs human approval: "))
+		}
+		return got
+	}
+	cases := []struct {
+		name, tail string
+		want       []string
+	}{
+		{"unchanged", `ignore: ["internal/idea/**"]
+limits: {file_lines: 400, function_lines: 60}
+`, nil},
+		{"tightened", `ignore: ["internal/idea/**", ".arch/**"]
+limits: {file_lines: 300, function_lines: 60}
+`, nil},
+		{"loosened", `ignore: ["internal/idea/**", "internal/store/**"]
+limits: {file_lines: 500}
+`, []string{
+			"ignore | ignore widened to exempt internal/store/s.go (and 1 more file(s))",
+			"limits.file_lines | limit file_lines raised from 400 to 500",
+			"limits.function_lines | limit function_lines removed (was 60)",
+		}},
+	}
+	for _, c := range cases {
+		got := entries(approvalBase + c.tail)
+		if strings.Join(got, "\n") != strings.Join(c.want, "\n") {
+			t.Errorf("%s: got\n%s\nwant\n%s", c.name, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
+		}
+	}
+	// A base without limits has nothing to raise.
+	if fs := approveFrom(t, approvalBase, approvalBase+"limits: {file_lines: 900}\n", false); len(fs) != 0 {
+		t.Fatalf("adding a limit is not loosening: %v", fs)
 	}
 }

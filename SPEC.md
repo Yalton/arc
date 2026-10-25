@@ -311,8 +311,11 @@ changes: an added concept, or a draft promoted to a concept; a removed
 boundary, or one whose `deny` no longer covers a file it covered or whose
 `from` now covers a file it did not; a rule removed from a concept (also by
 removing the concept); a flag's `expires` or a removal's `remove_by` moved
-later; a concept whose `paths` now own a file they did not. Coverage is
-judged on the files in the head tree. The check runs only with `--base` and
+later; a concept whose `paths` now own a file they did not; an `ignore`
+list that now exempts a file it did not (built-in ignores count on both
+sides); a `limits` value (`file_lines`, `function_lines`) raised, or
+removed or set to 0 where the base had one (adding or lowering a limit is
+not listed). Coverage is judged on the files in the head tree. The check runs only with `--base` and
 only when the base has a registry (adoption is not judged); pre-commit,
 `--staged`, working and `--all` modes skip it, so local agents can still
 propose such changes. With `ARC_APPROVED=1` it is skipped with an info line,
