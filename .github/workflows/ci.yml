@@ -1,0 +1,32 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gate --base needs history
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Give git an identity
+        # Tests build temp repos with real commits.
+        run: |
+          git config --global user.name "arc CI"
+          git config --global user.email "ci@localhost"
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests
+        run: go test -count=1 ./...
+      - name: arc gate (whole tree)
+        run: go run ./cmd/arc gate --all
+      - name: arc gate (pull request)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: go run ./cmd/arc gate --base "origin/$BASE_REF"

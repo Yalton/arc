@@ -33,6 +33,7 @@ ignore:
   - ".agents/**"
   - ".serena/**"
   - ".forgejo/**"
+  - ".github/**"
   - ".gitignore"
   - "go.mod"
   - "go.sum"

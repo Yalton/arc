@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -28,17 +29,33 @@ func checkCI(provider string) error {
 	return nil
 }
 
-// ciWorkflow is the workflow text. arc's module path is "arc", so it cannot
-// be fetched with 'go install'; the workflow builds it from the git URL in
-// the ARC_REPO repository variable at ARC_REF instead. %[1]s is the
-// provider, %[2]s the default branch.
+// ArcVersion is the version of the running arc. cmd/arc sets it; the
+// workflow installs that version, or latest when it is not a release.
+var ArcVersion = "dev"
+
+// releaseVersion matches release tags 'go install' can fetch: vX.Y.Z with an
+// optional dash-free prerelease. Pseudo-versions and "+dirty" builds fail it.
+var releaseVersion = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
+
+// installVersion is the version the workflow pins, and whether it is a
+// release (false means "latest").
+func installVersion() (string, bool) {
+	if releaseVersion.MatchString(ArcVersion) {
+		return ArcVersion, true
+	}
+	return "latest", false
+}
+
+// ciModule is the package the workflow installs.
+const ciModule = "github.com/Yalton/arc/cmd/arc"
+
+// ciWorkflow is the workflow text. %[1]s is the provider, %[2]s the default
+// branch, %[3]s the module path and %[4]s the version to install.
 const ciWorkflow = ciMarker + ` %[1]s'; rerunning it overwrites this file.
 # Delete the line above to take ownership of the file.
 #
-# arc cannot be 'go install'ed, so this workflow builds it from source. Set
-# repository variables (Settings > Actions > Variables):
-#   ARC_REPO  git URL of arc's source repository (required)
-#   ARC_REF   branch or tag to build (optional, default main)
+# Installs the arc that wrote this file; rerun 'arc init --ci %[1]s' after
+# upgrading arc to move the pin.
 name: arc
 on:
   push:
@@ -48,9 +65,6 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    env:
-      ARC_REPO: ${{ vars.ARC_REPO }}
-      ARC_REF: ${{ vars.ARC_REF || 'main' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,14 +74,7 @@ jobs:
           go-version: stable
           cache: false
       - name: Install arc
-        run: |
-          if [ -z "$ARC_REPO" ]; then
-            echo "::error::set the ARC_REPO repository variable to arc's git URL"
-            exit 1
-          fi
-          git clone -q --depth 1 --branch "$ARC_REF" "$ARC_REPO" "$RUNNER_TEMP/arc-src"
-          (cd "$RUNNER_TEMP/arc-src" && go build -o "$RUNNER_TEMP/arc-bin/arc" ./cmd/arc)
-          echo "$RUNNER_TEMP/arc-bin" >> "$GITHUB_PATH"
+        run: go install %[3]s@%[4]s
       - name: arc gate (pull request)
         if: github.event_name == 'pull_request'
         env:
@@ -84,7 +91,8 @@ func ensureCI(root, provider string, res *Result) error {
 	rel := ciPaths[provider]
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	branch, known := defaultBranch(root)
-	want := fmt.Sprintf(ciWorkflow, provider, branch)
+	pin, release := installVersion()
+	want := fmt.Sprintf(ciWorkflow, provider, branch, ciModule, pin)
 
 	data, err := os.ReadFile(full)
 	switch {
@@ -109,9 +117,11 @@ func ensureCI(root, provider string, res *Result) error {
 	if !known {
 		res.notice("%s runs arc gate --all on pushes to %q; no origin/HEAD, so that branch is a guess: edit it if wrong", rel, branch)
 	}
-	res.notice("%s builds arc from source: set repository variables ARC_REPO (arc's git URL) and optionally ARC_REF (branch or tag, default main)", rel)
+	if !release {
+		res.notice("%s installs arc@latest because this arc (%s) is not a release build; rerun init with a released arc to pin it", rel, ArcVersion)
+	}
 	if provider == "gitea" {
-		res.notice("Forgejo also reads .gitea/workflows; repository variables need Gitea 1.20+ or Forgejo")
+		res.notice("Forgejo also reads .gitea/workflows")
 	}
 	return nil
 }

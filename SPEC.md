@@ -164,10 +164,13 @@ Harness flags install the matching adapter. Idempotent.
 `.gitea/workflows/arc.yml` (Forgejo reads `.gitea/` too): `arc gate --base
 origin/<target>` on pull requests and `arc gate --all` on pushes to the
 default branch (`origin/HEAD`, else `main`), checking out with full history.
-arc's module path is not fetchable, so the workflow builds arc from source:
-it clones the git URL in the `ARC_REPO` repository variable at `ARC_REF`
-(branch or tag, default `main`) and fails with a clear error while
-`ARC_REPO` is unset; init prints a notice saying so. The file's first line
+The workflow installs arc with `actions/setup-go` and `go install
+github.com/Yalton/arc/cmd/arc@<version>`, pinned to the version of the arc
+that wrote it; when that arc is not a release build (`dev`, a
+pseudo-version, `+dirty`) it installs `@latest` and init prints a notice.
+Rerunning init with a newer arc moves the pin. While the GitHub repository
+is private (temporary), `go install` needs `GOPRIVATE=github.com/Yalton/*`
+and git credentials for it in the runner. The file's first line
 is an arc marker comment: rerun refreshes a marked file and refuses to touch
 an unmarked one.
 
