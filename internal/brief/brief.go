@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // WholeTokenBudget is the target size of the no-argument brief; callers warn

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 func git(t *testing.T, dir string, args ...string) string {

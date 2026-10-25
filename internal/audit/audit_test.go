@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 const testRegistry = `version: 1

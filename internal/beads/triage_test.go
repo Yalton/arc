@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 var now = time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)

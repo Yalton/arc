@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"arc/internal/initcmd"
+	"github.com/Yalton/arc/internal/initcmd"
 )
 
 func runInit(out *output, args []string) int {

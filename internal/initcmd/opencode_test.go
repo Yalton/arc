@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"arc/adapters/opencode"
+	"github.com/Yalton/arc/adapters/opencode"
 )
 
 func TestEnsureOpencodeInstallsIdempotently(t *testing.T) {

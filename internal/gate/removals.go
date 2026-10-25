@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // checkRemovals fails removals past their deadline, and removals whose

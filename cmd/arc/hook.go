@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"arc/internal/hook"
+	"github.com/Yalton/arc/internal/hook"
 )
 
 // runHook answers a harness hook. It reads the payload from stdin and

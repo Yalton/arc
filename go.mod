@@ -1,4 +1,4 @@
-module arc
+module github.com/Yalton/arc
 
 go 1.26
 

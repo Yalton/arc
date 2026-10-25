@@ -3,7 +3,7 @@ package gate
 import (
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // checkFlags fails flags whose expiry date has passed.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"arc/internal/gate"
+	"github.com/Yalton/arc/internal/gate"
 )
 
 // runBaseline records an external check's current findings as accepted

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/brief"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/brief"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // Labels triage adds (SPEC.md, "Beads integration details").

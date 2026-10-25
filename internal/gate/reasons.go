@@ -1,6 +1,6 @@
 package gate
 
-import "arc/internal/registry"
+import "github.com/Yalton/arc/internal/registry"
 
 // checkReasons fails concepts the change adds, or promotes from draft,
 // without a reason. Without a registry at the comparison point (the change

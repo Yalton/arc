@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"arc/internal/gitx"
-	"arc/internal/imports"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/imports"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // checkBoundaries fails imports in changed files that cross a boundary: the

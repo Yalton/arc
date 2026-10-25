@@ -6,8 +6,8 @@ import (
 	"text/template"
 	"time"
 
-	"arc/internal/brief"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/brief"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 //go:embed prompt.tmpl

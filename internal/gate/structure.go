@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // sqlIdent matches one SQL identifier: double-quoted, backquoted,

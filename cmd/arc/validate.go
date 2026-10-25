@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 func runValidate(out *output, args []string) int {

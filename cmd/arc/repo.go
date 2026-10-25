@@ -4,8 +4,8 @@ import (
 	"errors"
 	"os"
 
-	"arc/internal/gitx"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // repo is the repository a command operates on.

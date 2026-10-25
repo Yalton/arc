@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/gate"
-	"arc/internal/gitx"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gate"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // stringList is a repeatable, comma-separable flag.

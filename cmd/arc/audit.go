@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/audit"
-	"arc/internal/beads"
+	"github.com/Yalton/arc/internal/audit"
+	"github.com/Yalton/arc/internal/beads"
 )
 
 // auditOutput is the --json output of arc audit: the report, plus the

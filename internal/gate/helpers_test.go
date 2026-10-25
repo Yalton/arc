@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"arc/internal/gitx"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // testRepo is a temp git repository with a registry.

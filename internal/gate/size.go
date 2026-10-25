@@ -8,7 +8,7 @@ import (
 	"go/token"
 	"strings"
 
-	"arc/internal/gitx"
+	"github.com/Yalton/arc/internal/gitx"
 )
 
 // checkSize fails changed files over limits.file_lines and, for Go, changed

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"arc/internal/beads"
+	"github.com/Yalton/arc/internal/beads"
 )
 
 type fakeFiler struct {

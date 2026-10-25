@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"arc/internal/beads"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/beads"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // Labels on beads filed by --file-beads (SPEC.md, "Beads integration

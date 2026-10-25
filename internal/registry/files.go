@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"arc/internal/gitx"
+	"github.com/Yalton/arc/internal/gitx"
 )
 
 // RepoFiles lists the files validation and ownership are judged against:

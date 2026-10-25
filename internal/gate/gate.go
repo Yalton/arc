@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/gitx"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 type Severity string

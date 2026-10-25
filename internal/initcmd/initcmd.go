@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"arc/internal/gitx"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // Options selects optional init behaviour.

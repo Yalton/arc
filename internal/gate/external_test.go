@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // fakeTool writes an executable script that prints the file "out" in the

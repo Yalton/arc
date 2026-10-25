@@ -3,7 +3,7 @@ package gate
 import (
 	"strings"
 
-	"arc/internal/brief"
+	"github.com/Yalton/arc/internal/brief"
 )
 
 // checkPlacement fails every added, non-ignored file no concept owns.

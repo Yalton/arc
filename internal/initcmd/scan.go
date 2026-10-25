@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // conventionalRoots hold packages one level down; --scan proposes a concept

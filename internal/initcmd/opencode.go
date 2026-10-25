@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"arc/adapters/opencode"
+	"github.com/Yalton/arc/adapters/opencode"
 )
 
 // opencodeShimPath is where opencode auto-loads project plugins (see the

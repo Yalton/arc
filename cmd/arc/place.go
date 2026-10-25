@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/beads"
-	"arc/internal/brief"
-	"arc/internal/gitx"
+	"github.com/Yalton/arc/internal/beads"
+	"github.com/Yalton/arc/internal/brief"
+	"github.com/Yalton/arc/internal/gitx"
 )
 
 // relPaths converts command-line paths (relative to the working directory

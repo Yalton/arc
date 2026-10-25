@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // Placement statuses.

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // External checks are the registry's `checks` entries (SPEC.md principle 5:

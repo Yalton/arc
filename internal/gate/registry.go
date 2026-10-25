@@ -1,6 +1,6 @@
 package gate
 
-import "arc/internal/registry"
+import "github.com/Yalton/arc/internal/registry"
 
 // checkRegistry reports validation problems and a stale rendered block.
 func checkRegistry(ctx *Context) ([]Finding, error) {

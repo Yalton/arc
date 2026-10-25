@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"arc/internal/beads"
+	"github.com/Yalton/arc/internal/beads"
 )
 
 // triageReport is the --json output of arc triage.

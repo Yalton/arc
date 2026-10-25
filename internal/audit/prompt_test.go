@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files in testdata/audit")

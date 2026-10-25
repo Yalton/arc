@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"arc/internal/gitx"
-	"arc/internal/registry"
+	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 const structureRegistry = `version: 1
