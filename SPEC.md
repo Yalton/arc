@@ -224,9 +224,7 @@ The workflow installs arc with `actions/setup-go` and `go install
 github.com/Yalton/arc/cmd/arc@<version>`, pinned to the version of the arc
 that wrote it; when that arc is not a release build (`dev`, a
 pseudo-version, `+dirty`) it installs `@latest` and init prints a notice.
-Rerunning init with a newer arc moves the pin. While the GitHub repository
-is private (temporary), `go install` needs `GOPRIVATE=github.com/Yalton/*`
-and git credentials for it in the runner. The file's first line
+Rerunning init with a newer arc moves the pin. The file's first line
 is an arc marker comment: rerun refreshes a marked file and refuses to touch
 an unmarked one.
 
