@@ -25,7 +25,7 @@ go vet ./...
 
 ### Conventions
 
-- Go module path: `arc` (local module; no remote yet).
+- Go module path: `github.com/Yalton/arc` (GitHub repo private for now; Forgejo `origin` is primary).
 - Standard library first. Allowed dependencies: `gopkg.in/yaml.v3`,
   `github.com/bmatcuk/doublestar/v4` (globs). Anything else needs a note on
   the bead explaining why.
