@@ -211,3 +211,43 @@ limits: {file_lines: 500}
 		t.Fatalf("adding a limit is not loosening: %v", fs)
 	}
 }
+
+func TestApprovalModulesRemovedOrNarrowed(t *testing.T) {
+	base := `version: 1
+modules:
+  - {id: A, paths: ["addons/A/**"], entry: [A]}
+  - {id: B, paths: ["addons/B/**"], entry: [B]}
+`
+	head := `version: 1
+modules:
+  - {id: B, paths: ["addons/B/one/**"], entry: [B]}
+  - {id: C, paths: ["addons/C/**"], entry: [C]}
+`
+	files := []string{"addons/A/a.cs", "addons/B/one/x.cs", "addons/B/two.cs", "addons/C/c.cs"}
+	run := func(base, head string, approved bool) string {
+		b, _ := registry.Parse([]byte(base))
+		h, _ := registry.Parse([]byte(head))
+		fs, err := checkApproval(&Context{Reg: h, BaseReg: b, Files: files, Base: true, Approved: approved})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var s []string
+		for _, f := range fs {
+			s = append(s, f.String())
+		}
+		return strings.Join(s, "\n")
+	}
+	got := run(base, head, false)
+	const label = ". A maintainer approves by adding the arch-approved label to the pull request."
+	want := "[] .arch/registry.yaml: needs human approval: module A removed" + label + "\n" +
+		"[] .arch/registry.yaml: needs human approval: module B paths narrowed, no longer covering addons/B/two.cs" + label
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if got := run(head, head+"  - {id: D, paths: [\"addons/**\"], entry: [D]}\n", false); got != "" {
+		t.Fatalf("adding or widening is not structural: %s", got)
+	}
+	if got := run(base, head, true); strings.Contains(got, "module") {
+		t.Fatalf("approved: %s", got)
+	}
+}

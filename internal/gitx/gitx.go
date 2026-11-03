@@ -177,3 +177,20 @@ func SubmoduleStatus(dir string) (string, error) {
 	out, err := run(dir, nil, "--no-optional-locks", "status", "--porcelain")
 	return string(out), err
 }
+
+// Gitlinks returns the repo-relative paths of the submodule gitlinks in the
+// index (mode 160000), sorted.
+func Gitlinks(root string) ([]string, error) {
+	out, err := run(root, nil, "ls-files", "-s", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var links []string
+	for _, e := range splitZ(out) {
+		// "<mode> <object> <stage>\t<path>"
+		if tab := strings.IndexByte(e, '\t'); tab >= 0 && strings.HasPrefix(e, "160000 ") {
+			links = append(links, e[tab+1:])
+		}
+	}
+	return sortedUnique(links, nil), nil
+}
