@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -24,6 +25,7 @@ func (r *Registry) Validate(files []string) []Problem {
 	v.ids()
 	v.references()
 	v.globs()
+	v.modules()
 	v.overlap()
 	v.dates()
 	v.misc()
@@ -60,7 +62,7 @@ func (v *validator) ids() {
 			seen[id] = true
 		}
 	}
-	var ng, cs, bs, fs, rs, ks []string
+	var ng, cs, bs, fs, rs, ks, ms []string
 	for _, x := range v.r.NonGoals {
 		ng = append(ng, x.ID)
 	}
@@ -76,6 +78,9 @@ func (v *validator) ids() {
 	for _, x := range v.r.Removals {
 		rs = append(rs, x.ID)
 	}
+	for _, x := range v.r.Modules {
+		ms = append(ms, x.ID)
+	}
 	for _, x := range v.r.Checks {
 		ks = append(ks, x.ID)
 	}
@@ -83,6 +88,7 @@ func (v *validator) ids() {
 	unique("concepts", cs)
 	unique("boundaries", bs)
 	unique("checks", ks)
+	unique("modules", ms)
 	// Flags and removals share the arc:<entry-id> bead label namespace.
 	unique("flags/removals", append(fs, rs...))
 }
@@ -127,6 +133,9 @@ func (v *validator) globs() {
 		check("boundaries["+b.ID+"].from", b.From, true)
 		check("boundaries["+b.ID+"].deny", b.Deny, true)
 	}
+	for _, m := range v.r.Modules {
+		check("modules["+m.ID+"].paths", m.Paths, true)
+	}
 	for _, rm := range v.r.Removals {
 		// Exempt from existence: a finished removal is reported by gate.
 		check("removals["+rm.ID+"].paths", rm.Paths, false)
@@ -151,6 +160,9 @@ func (v *validator) overlap() {
 	var order []pair
 	for _, f := range v.files {
 		var owners []string
+		if _, ok := v.r.ModuleOf(f); ok {
+			continue // module paths take precedence over concept paths
+		}
 		for _, c := range v.r.Concepts {
 			if matchAny(c.Paths, f) {
 				owners = append(owners, c.ID)
@@ -208,4 +220,50 @@ func SortProblems(ps []Problem) {
 		}
 		return ps[i].Message < ps[j].Message
 	})
+}
+
+var moduleID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// modules checks the shape of each module entry and that no file is under
+// the paths of two modules. Ids and path globs are checked with the other
+// sections (ids, globs).
+func (v *validator) modules() {
+	for _, m := range v.r.Modules {
+		entry := "modules[" + m.ID + "]"
+		if m.ID != "" && !moduleID.MatchString(m.ID) {
+			v.add(entry, "id %q must match [A-Za-z0-9][A-Za-z0-9._-]*", m.ID)
+		}
+		if len(m.Entry) == 0 && m.Import == "" {
+			v.add(entry, "needs at least one of entry and import")
+		}
+	}
+	type pair struct{ a, b string }
+	first := map[pair]string{}
+	count := map[pair]int{}
+	var order []pair
+	for _, f := range v.files {
+		var owners []string
+		for _, m := range v.r.Modules {
+			if matchAny(m.Paths, f) {
+				owners = append(owners, m.ID)
+			}
+		}
+		for i := 0; i < len(owners); i++ {
+			for j := i + 1; j < len(owners); j++ {
+				p := pair{owners[i], owners[j]}
+				if _, ok := first[p]; !ok {
+					first[p] = f
+					order = append(order, p)
+				}
+				count[p]++
+			}
+		}
+	}
+	for _, p := range order {
+		msg := fmt.Sprintf("%s is under the paths of both %s and %s", first[p], p.a, p.b)
+		if n := count[p]; n > 1 {
+			msg += fmt.Sprintf(" (%d files)", n)
+		}
+		v.add("modules["+p.a+"].paths", "%s; narrow one so each file has one module", msg)
+	}
 }

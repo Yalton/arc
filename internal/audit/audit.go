@@ -248,6 +248,9 @@ func (r *Report) addHistory(commits []gitx.Commit) {
 // addRegistry adds the findings that come from the registry alone.
 func (r *Report) addRegistry(o Options, now time.Time) {
 	for _, f := range o.Files {
+		if _, ok := o.Reg.ModuleOf(f); ok {
+			continue
+		}
 		if !o.Reg.IsIgnored(f) && o.Reg.Owner(f) == nil {
 			r.Unowned = append(r.Unowned, f)
 		}

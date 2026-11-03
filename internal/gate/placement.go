@@ -11,7 +11,7 @@ import (
 func checkPlacement(ctx *Context) ([]Finding, error) {
 	var out []Finding
 	for _, path := range ctx.Changes.Added() {
-		if ctx.Reg.IsIgnored(path) || ctx.Reg.Owner(path) != nil {
+		if _, ok := ctx.Reg.ModuleOf(path); ok || ctx.Reg.IsIgnored(path) || ctx.Reg.Owner(path) != nil {
 			continue
 		}
 		out = append(out, Finding{

@@ -15,6 +15,7 @@ const (
 	StatusOwned   = "owned"
 	StatusIgnored = "ignored"
 	StatusUnowned = "unowned"
+	StatusModule  = "module"
 )
 
 // MaxSuggestions is how many closest concepts place reports for an unowned path.
@@ -25,6 +26,7 @@ type PlaceResult struct {
 	Path    string       `json:"path"`
 	Status  string       `json:"status"`
 	Concept string       `json:"concept,omitempty"`
+	Module  string       `json:"module,omitempty"`
 	Closest []Suggestion `json:"closest,omitempty"`
 }
 
@@ -35,15 +37,18 @@ type Suggestion struct {
 	Prefix string `json:"prefix,omitempty"`
 }
 
-// Place reports the owner of path (repo-relative, slash-separated). Ignore
-// wins over ownership. For unowned paths, up to MaxSuggestions concepts are
+// Place reports the owner of path (repo-relative, slash-separated). A module
+// path is reported first, then ignore, which wins over ownership. For unowned paths, up to MaxSuggestions concepts are
 // ranked by the number of leading path segments shared with any of the
 // concept's glob literal prefixes, then by how many path segment tokens
 // equal an alias, then registry order. Concepts scoring zero on both are
 // left out, so fewer than three (or none) may be returned.
 func Place(reg *registry.Registry, p string) PlaceResult {
 	r := PlaceResult{Path: p}
-	switch {
+	switch m, isModule := reg.ModuleOf(p); {
+	case isModule:
+		r.Status = StatusModule
+		r.Module = m.ID
 	case reg.IsIgnored(p):
 		r.Status = StatusIgnored
 	case reg.Owner(p) != nil:
@@ -64,6 +69,8 @@ func PlaceMessage(r PlaceResult) string {
 		return r.Path + ": " + r.Concept
 	case StatusIgnored:
 		return r.Path + ": ignored"
+	case StatusModule:
+		return r.Path + ": module " + r.Module + " (installed; use, never edit)"
 	}
 	const fix = "add a concept to " + registry.Path + " with a reason."
 	if len(r.Closest) == 0 {

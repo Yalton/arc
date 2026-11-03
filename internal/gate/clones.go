@@ -53,7 +53,7 @@ func cloneLines(id string, lines []string, reg *registry.Registry) []string {
 				l = m[1] + ":" + m[2] + "-" + m[3] + ": duplicate of " + m[4] + ":" + m[5] + "-" + m[6]
 			}
 		}
-		if m := cloneRE.FindStringSubmatch(l); m != nil && (exempt(reg, m[1]) || exempt(reg, m[2])) {
+		if m := cloneRE.FindStringSubmatch(l); m != nil && (exempt(reg, m[1]) || exempt(reg, m[2]) || bothModule(reg, m[1], m[2])) {
 			continue
 		}
 		out = append(out, l)
@@ -66,4 +66,16 @@ func cloneLines(id string, lines []string, reg *registry.Registry) []string {
 func exempt(reg *registry.Registry, p string) bool {
 	p = strings.TrimPrefix(p, "./")
 	return registry.IsTest(p) || (reg != nil && reg.IsIgnored(p))
+}
+
+// bothModule reports whether both sides of a clone are under module paths:
+// third-party code is not judged. A clone between a module file and a
+// project file is kept, since copying module code is what modules prevent.
+func bothModule(reg *registry.Registry, a, b string) bool {
+	if reg == nil {
+		return false
+	}
+	_, okA := reg.ModuleOf(strings.TrimPrefix(a, "./"))
+	_, okB := reg.ModuleOf(strings.TrimPrefix(b, "./"))
+	return okA && okB
 }

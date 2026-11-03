@@ -29,6 +29,7 @@ type Registry struct {
 	Boundaries []Boundary `yaml:"boundaries"`
 	Flags      []Flag     `yaml:"flags"`
 	Removals   []Removal  `yaml:"removals"`
+	Modules    []Module   `yaml:"modules"`
 	Limits     Limits     `yaml:"limits"`
 	Checks     []Check    `yaml:"checks"`
 	// Beads marks a repository that tracks work in beads; the agent snippet
@@ -85,6 +86,19 @@ type Removal struct {
 	Bead       string   `yaml:"bead"`
 }
 
+// Module is installed third-party code the project uses but never edits
+// (SPEC.md, "Modules"). Paths may be empty (a Go module lives outside the repo).
+type Module struct {
+	ID      string   `yaml:"id" json:"id"`
+	Summary string   `yaml:"summary" json:"summary,omitempty"`
+	Paths   []string `yaml:"paths" json:"paths,omitempty"`
+	Covers  []string `yaml:"covers" json:"covers,omitempty"`
+	Entry   []string `yaml:"entry" json:"entry,omitempty"`
+	Import  string   `yaml:"import" json:"import,omitempty"`
+	Rules   []string `yaml:"rules" json:"rules,omitempty"`
+	Source  string   `yaml:"source" json:"source,omitempty"`
+}
+
 type Limits struct {
 	FileLines     int `yaml:"file_lines"`
 	FunctionLines int `yaml:"function_lines"`
@@ -133,9 +147,25 @@ func (r *Registry) Concept(id string) *Concept {
 	return nil
 }
 
+// ModuleOf returns the module whose paths match path, if any. Module paths
+// take precedence over concept paths (SPEC.md, "Modules"). A glob such as
+// "dir/**" also matches the gitlink path "dir" of a submodule.
+func (r *Registry) ModuleOf(path string) (*Module, bool) {
+	for i := range r.Modules {
+		if matchAny(r.Modules[i].Paths, path) {
+			return &r.Modules[i], true
+		}
+	}
+	return nil, false
+}
+
 // Owner returns the concept whose paths match path (repo-relative,
-// slash-separated), or nil. Validation guarantees at most one match.
+// slash-separated), or nil. A path under a module has no concept. Validation
+// guarantees at most one match.
 func (r *Registry) Owner(path string) *Concept {
+	if _, ok := r.ModuleOf(path); ok {
+		return nil
+	}
 	for i := range r.Concepts {
 		if matchAny(r.Concepts[i].Paths, path) {
 			return &r.Concepts[i]
@@ -149,7 +179,7 @@ func (r *Registry) Owner(path string) *Concept {
 // registries written before an adapter existed still pass placement.
 var BuiltinIgnore = []string{
 	".arch/**", ArchitectureFile, "AGENTS.md", "CLAUDE.md",
-	".claude/**", ".codex/**", ".opencode/**",
+	".claude/**", ".codex/**", ".opencode/**", ".gitmodules",
 }
 
 // IsIgnored reports whether path is exempt from placement checks.
