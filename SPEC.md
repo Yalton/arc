@@ -201,12 +201,16 @@ source`); `--json` omits empty fields.
   in the text. An `entry` matches when its leading identifier (the text
   before its first `.`, or the whole entry when there is none) occurs in the
   text as a whole word, case-insensitively.
-- **Wiring.** A module is wired when either holds:
-  - `import` is set and `go list -deps` of the repository's main packages
+- **Wiring.** A module is wired by one of two tests, chosen by `import`:
+  - when `import` is set, only when `go list -deps` of the repository's main packages
     (`go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...`, then
     `go list -deps <mains>`, with network and toolchain downloads off as for
-    `boundaries`) lists `import` or a package under `import/`;
-  - an `entry`, or its leading identifier (the whole entry when the text
+    `boundaries`) lists `import` or a package under `import/`. The text
+    match below is not used for such a module: a Go entry's leading
+    identifier is its package name, which occurs in `go.mod`'s `require`
+    line and in `go.sum` whenever the module is installed, whether or not
+    any program uses it;
+  - when `import` is empty, when an `entry`, or its leading identifier (the whole entry when the text
     before its first `.` is empty, as in `.X`), occurs as a whole word in a
     repository file. Plain text, no language parsing: `\b` is put only on a
     side whose edge character is a word character (`[A-Za-z0-9_]`); a side
@@ -218,8 +222,10 @@ source`); `--json` omits empty fields.
     "ignored" means all of: git-ignored; arc's built-in ignores
     (`.arch/**`, `ARCHITECTURE.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/**`,
     `.codex/**`, `.opencode/**`, `.gitmodules`); the registry's `ignore`
-    globs; module paths; `*.md` files; binary files (a NUL byte); and files
-    over 1 MiB. Test files not covered by `ignore` count. Markdown is left
+    globs; module paths; `*.md` files; files named `go.mod`, `go.sum`,
+    `go.work` or `go.work.sum` (in any directory: they name installed
+    modules, not uses of them); binary files (a NUL byte in the first
+    8 KiB); and files over 1 MiB. Test files not covered by `ignore` count. Markdown is left
     out because documentation files print setup lines that would wire every
     module. The leading identifier counts because some modules are wired
     only through configuration: the Godot autoload line
@@ -466,11 +472,14 @@ module id):
   paths has a `replace` directive (single or in a block, spaced or not, as
   in `replace(` or `a=>b`) whose left side is the module's `import` or a
   path prefix of it at a `/`; one finding per `go.mod` and module;
-- `module <id>: not wired (no reference to <entries> outside module paths)`:
-  the module is not wired (see "Modules"); `<entries>` is the `entry` list
-  joined with `, `, or `import <import>` when it is empty. When `go list`
-  fails and no `entry` matched, the finding is the warning `module <id>:
-  wiring not checked (go list failed)` instead. With `--staged`, a module
+- `module <id>: not wired (no reference to <entries> outside module paths)`
+  for a module without `import`, `module <id>: not wired (no main package
+  depends on <import>)` for one with it: the module is not wired (see
+  "Modules"); `<entries>` is the `entry` list joined with `, `. When `go
+  list` fails for a module with `import`, the finding is the warning
+  `module <id>: wiring not checked (go list failed)` instead. A submodule
+  whose `git status` fails gives the warning `module <id>: submodule
+  status not checked (<error>)` instead of stopping the gate. With `--staged`, a module
   absent from the `HEAD` registry is being installed by this commit and is
   not judged for wiring, so an install commit passes pre-commit; `--base`,
   working mode and `--all` judge every module.

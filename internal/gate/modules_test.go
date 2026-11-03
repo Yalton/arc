@@ -299,6 +299,15 @@ func TestModulesWiringByEntry(t *testing.T) {
 		{"only in a binary file", map[string]string{"blob.bin": "InputModeManager\x00"}, nil, false},
 		{"not a whole word", map[string]string{"Main.cs": "MyInputModeManager x;\n"}, nil, false},
 		{"untracked, not ignored", nil, map[string]string{"Untracked.cs": ref}, true},
+		{"only in go.mod, go.sum and go.work files", map[string]string{
+			"go.mod":        "module example.com/app\n\nrequire example.com/InputModeManager v0.1.0\n",
+			"go.sum":        "example.com/InputModeManager v0.1.0 h1:x=\n",
+			"tools/go.work": "use ./InputModeManager\n",
+			"go.work.sum":   "example.com/InputModeManager v0.1.0 h1:x=\n",
+			"tools/go.sum":  "example.com/InputModeManager v0.1.0 h1:x=\n",
+		}, nil, false},
+		{"NUL in the first 8 KiB", map[string]string{"big.dat": "\x00" + strings.Repeat("x", 9000) + ref}, nil, false},
+		{"NUL only after the first 8 KiB", map[string]string{"big.txt": strings.Repeat("x\n", 4200) + ref + "\x00"}, nil, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -341,9 +350,69 @@ modules:
 	r.write("unused/unused.go", "package unused\n")
 	r.commitAll("init")
 	got := moduleLines(r.gate("all", "modules"), "not wired")
-	want := "[modules] module Unused: not wired (no reference to import example.com/app/unused outside module paths)"
+	want := "[modules] module Unused: not wired (no main package depends on example.com/app/unused)"
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// A module with import is judged by go list alone: its package name in a
+// text file, or in go.mod's require line, does not wire it.
+func TestModulesWiringGoImportIgnoresText(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not on PATH")
+	}
+	r := newRepo(t, `version: 1
+system: {name: demo, summary: Demo.}
+concepts:
+  - {id: app, name: App, summary: App., paths: ["**"]}
+modules:
+  - {id: Kit, summary: K., import: example.com/app/kit, entry: [kit.Run]}
+`)
+	r.write("go.mod", "module example.com/app\n\ngo 1.21\n")
+	r.write("main.go", "package main\n\nfunc main() {}\n")
+	r.write("kit/kit.go", "package kit\n\nfunc Run() {}\n")
+	r.write("notes.txt", "call kit.Run() from main\n")
+	r.commitAll("init")
+	want := "[modules] module Kit: not wired (no main package depends on example.com/app/kit)"
+	if got := moduleLines(r.gate("all", "modules"), "not wired"); len(got) != 1 || got[0] != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// The review's repro: a go get require line and an empty main. Before,
+// "shortid" in go.mod counted as wired and go list never ran.
+func TestModulesWiringGoRequireLineDoesNotWire(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not on PATH")
+	}
+	r := newRepo(t, `version: 1
+system: {name: demo, summary: Demo.}
+concepts:
+  - {id: app, name: App, summary: App., paths: ["**"]}
+modules:
+  - {id: shortid, summary: S., import: repo.example.invalid/artifactory/shortid, entry: [shortid.New]}
+`)
+	r.write("go.mod", "module example.com/app\n\ngo 1.21\n\nrequire repo.example.invalid/artifactory/shortid v0.1.0 // indirect\n")
+	r.write("main.go", "package main\n\nfunc main() {}\n")
+	r.commitAll("init")
+	rep := r.gate("all", "modules")
+	if len(rep.Findings) != 1 || !strings.Contains(rep.Findings[0].Message, "module shortid: ") {
+		t.Fatalf("want one wiring finding, got %q", findings(rep))
+	}
+}
+
+func TestModulesBrokenSubmoduleIsAWarning(t *testing.T) {
+	r := submoduleRepo(t)
+	r.commitAll("sub")
+	if err := os.RemoveAll(filepath.Join(r.root, "addons/Kit/.git")); err != nil {
+		t.Fatal(err)
+	}
+	r.write("addons/Kit/.git", "gitdir: /nonexistent/arc-test\n")
+	rep := r.gate("all", "modules")
+	got := moduleLines(rep, "submodule status not checked")
+	if len(got) != 1 || !strings.HasPrefix(got[0], "[modules] warning: addons/Kit: module Kit: submodule status not checked (") {
+		t.Fatalf("got %q", findings(rep))
 	}
 }
 
@@ -382,9 +451,44 @@ func TestEntryWordMatching(t *testing.T) {
 		{"$Kit", "$Kits", false},
 	}
 	for _, c := range cases {
-		re := regexp.MustCompile(wordPattern(leadingIdent(c.entry)))
+		id := leadingIdent(c.entry)
+		re := regexp.MustCompile(wordPattern(id))
 		if got := re.MatchString(c.text); got != c.match {
 			t.Errorf("entry %q in %q: match %v, want %v", c.entry, c.text, got, c.match)
+		}
+		// The literal prefilter never changes the result.
+		p := entryPattern{idents: [][]byte{[]byte(id), []byte("absent")}, re: re}
+		if got := p.match([]byte(c.text)); got != c.match {
+			t.Errorf("prefiltered entry %q in %q: match %v, want %v", c.entry, c.text, got, c.match)
+		}
+	}
+}
+
+// BenchmarkEntryReferences scans many text files for an entry none of them
+// mentions, the case where the wiring scan cannot stop early.
+func BenchmarkEntryReferences(b *testing.B) {
+	root := b.TempDir()
+	reg, err := registry.Parse([]byte(wiringRegistry))
+	if err != nil {
+		b.Fatal(err)
+	}
+	line := strings.Repeat("func handler(w http.ResponseWriter, r *http.Request) { manager.Push(r) }\n", 200)
+	var files []string
+	for i := 0; i < 200; i++ {
+		f := filepath.ToSlash(filepath.Join("src", strings.Repeat("d", i%5+1), "f"+string(rune('a'+i%26))+strings.Repeat("x", i/26)+".go"))
+		if err := os.MkdirAll(filepath.Join(root, filepath.Dir(f)), 0o755); err != nil {
+			b.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, f), []byte(line), 0o644); err != nil {
+			b.Fatal(err)
+		}
+		files = append(files, f)
+	}
+	ctx := &Context{Root: root, Reg: reg, Files: files}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if got, err := entryReferences(ctx); err != nil || len(got) != 0 {
+			b.Fatal(got, err)
 		}
 	}
 }

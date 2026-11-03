@@ -243,3 +243,7 @@ func matchAny(patterns []string, path string) bool {
 	}
 	return false
 }
+
+// SubmoduleDirty is the gate finding and hook feedback text, after
+// "module <id>: ", for a module submodule with modified tracked files.
+const SubmoduleDirty = "submodule has local changes"

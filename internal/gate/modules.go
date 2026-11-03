@@ -3,8 +3,10 @@ package gate
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Yalton/arc/internal/gitx"
+	"github.com/Yalton/arc/internal/registry"
 )
 
 // maxWiringFile is the size above which a file is not searched for
@@ -34,11 +37,7 @@ func checkModules(ctx *Context) ([]Finding, error) {
 		return nil, err
 	}
 	out := changedModuleFiles(ctx, links)
-	dirty, err := dirtySubmodules(ctx, links)
-	if err != nil {
-		return nil, err
-	}
-	out = append(out, dirty...)
+	out = append(out, dirtySubmodules(ctx, links)...)
 	repl, err := replacedImports(ctx)
 	if err != nil {
 		return nil, err
@@ -81,8 +80,9 @@ func changedModuleFiles(ctx *Context, links []string) []Finding {
 
 // dirtySubmodules reports checked-out submodules under module paths whose
 // work tree has modified tracked files (untracked files are generated ones,
-// as for added files in changedModuleFiles).
-func dirtySubmodules(ctx *Context, links []string) ([]Finding, error) {
+// as for added files in changedModuleFiles). A submodule whose status
+// fails is a warning, so one broken checkout does not stop the gate.
+func dirtySubmodules(ctx *Context, links []string) []Finding {
 	var out []Finding
 	for _, l := range links {
 		m, ok := ctx.Reg.ModuleOf(l)
@@ -95,19 +95,24 @@ func dirtySubmodules(ctx *Context, links []string) ([]Finding, error) {
 		}
 		st, err := gitx.SubmoduleModified(dir)
 		if err != nil {
-			return nil, err
+			out = append(out, Finding{Severity: Warning, Path: l, Entry: m.ID,
+				Message: "module " + m.ID + ": submodule status not checked (" + strings.TrimSpace(err.Error()) + ")"})
+			continue
 		}
 		if strings.TrimSpace(st) != "" {
 			out = append(out, Finding{Path: l, Entry: m.ID,
-				Message: "module " + m.ID + ": submodule has local changes"})
+				Message: "module " + m.ID + ": " + registry.SubmoduleDirty})
 		}
 	}
-	return out, nil
+	return out
 }
 
 // replacedImports reports tracked go.mod files outside module paths whose
 // replace directives redirect a module's import (or a prefix of it at a /).
 func replacedImports(ctx *Context) ([]Finding, error) {
+	if !slices.ContainsFunc(ctx.Reg.Modules, func(m registry.Module) bool { return m.Import != "" }) {
+		return nil, nil
+	}
 	tracked, err := gitx.TrackedFiles(ctx.Root)
 	if err != nil {
 		return nil, err
@@ -171,9 +176,11 @@ func replaceSources(gomod []byte) []string {
 	return out
 }
 
-// unwiredModules reports modules that nothing outside module paths
-// references: no entry's leading identifier occurs as a whole word in a
-// non-ignored repository file, and no main package depends on its import.
+// unwiredModules reports modules that nothing outside module paths uses:
+// for a module with an import, no main package depends on it (go list
+// alone: a Go entry's package name is in go.mod and go.sum once the module
+// is installed); for one without, no entry's leading identifier occurs as
+// a whole word in a file that wiring searches.
 // With --staged, a module absent from the HEAD registry is being installed
 // by this commit and is not judged, so an install commit passes pre-commit.
 func unwiredModules(ctx *Context) ([]Finding, error) {
@@ -192,22 +199,24 @@ func unwiredModules(ctx *Context) ([]Finding, error) {
 		if referenced[m.ID] || installing(ctx, m.ID) {
 			continue
 		}
-		if m.Import != "" {
-			if !listed {
-				deps, depsErr = mainDeps(ctx.Root)
-				listed = true
-			}
-			if depsErr != nil {
-				out = append(out, Finding{Severity: Warning, Entry: m.ID,
-					Message: "module " + m.ID + ": wiring not checked (go list failed)"})
-				continue
-			}
-			if importListed(deps, m.Import) {
-				continue
-			}
+		if m.Import == "" {
+			out = append(out, Finding{Entry: m.ID, Message: "module " + m.ID +
+				": not wired (no reference to " + m.Surface() + " outside module paths)"})
+			continue
 		}
-		out = append(out, Finding{Entry: m.ID, Message: "module " + m.ID +
-			": not wired (no reference to " + m.Surface() + " outside module paths)"})
+		if !listed {
+			deps, depsErr = mainDeps(ctx.Root)
+			listed = true
+		}
+		if depsErr != nil {
+			out = append(out, Finding{Severity: Warning, Entry: m.ID,
+				Message: "module " + m.ID + ": wiring not checked (go list failed)"})
+			continue
+		}
+		if !importListed(deps, m.Import) {
+			out = append(out, Finding{Entry: m.ID, Message: "module " + m.ID +
+				": not wired (no main package depends on " + m.Import + ")"})
+		}
 	}
 	return out, nil
 }
@@ -227,20 +236,46 @@ func installing(ctx *Context, id string) bool {
 	return true
 }
 
-// entryReferences returns the ids of modules whose entry (by its leading
-// identifier, which every full entry match also contains) occurs as a whole
-// word in a file that wiring searches.
+// entryPattern is one module's wiring text match: the literal leading
+// identifiers, every one of which a regexp match contains, and the
+// whole-word regexp itself.
+type entryPattern struct {
+	idents [][]byte
+	re     *regexp.Regexp
+}
+
+// match runs the regexp only on text that contains an identifier, which
+// most files do not; bytes.Contains is far faster than the regexp.
+func (p entryPattern) match(data []byte) bool {
+	for _, id := range p.idents {
+		if bytes.Contains(data, id) {
+			return p.re.Match(data)
+		}
+	}
+	return false
+}
+
+// entryReferences returns the ids of modules without an import whose entry
+// (by its leading identifier, which every full entry match also contains)
+// occurs as a whole word in a file that wiring searches.
 func entryReferences(ctx *Context) (map[string]bool, error) {
-	pats := map[string]*regexp.Regexp{}
+	pats := map[string]entryPattern{}
 	for _, m := range ctx.Reg.Modules {
+		if m.Import != "" {
+			continue
+		}
+		var p entryPattern
 		var alts []string
 		for _, e := range m.Entry {
 			if e != "" {
-				alts = append(alts, wordPattern(leadingIdent(e)))
+				id := leadingIdent(e)
+				p.idents = append(p.idents, []byte(id))
+				alts = append(alts, wordPattern(id))
 			}
 		}
 		if len(alts) > 0 {
-			pats[m.ID] = regexp.MustCompile(strings.Join(alts, "|"))
+			p.re = regexp.MustCompile(strings.Join(alts, "|"))
+			pats[m.ID] = p
 		}
 	}
 	found := map[string]bool{}
@@ -255,8 +290,8 @@ func entryReferences(ctx *Context) (map[string]bool, error) {
 		if err != nil {
 			return nil, err
 		}
-		for id, re := range pats {
-			if !found[id] && re.Match(data) {
+		for id, p := range pats {
+			if !found[id] && p.match(data) {
 				found[id] = true
 			}
 		}
@@ -264,25 +299,57 @@ func entryReferences(ctx *Context) (map[string]bool, error) {
 	return found, nil
 }
 
+// goModFiles name installed modules, not uses of them, so wiring does not
+// search them.
+var goModFiles = map[string]bool{"go.mod": true, "go.sum": true, "go.work": true, "go.work.sum": true}
+
+// binarySniff is how much of a file wiring reads to decide it is binary.
+const binarySniff = 8 << 10
+
 // wiringContent returns f's working-tree content when wiring searches it,
-// else nil: ignored files, module paths, Markdown, binary files and files
+// else nil: ignored files, module paths, Markdown, go.mod and friends,
+// binary files (a NUL in the first 8 KiB, read before the rest) and files
 // over 1 MiB are left out.
 func wiringContent(ctx *Context, f string) ([]byte, error) {
-	if ctx.Reg.IsIgnored(f) || strings.HasSuffix(strings.ToLower(f), ".md") {
+	if ctx.Reg.IsIgnored(f) || strings.HasSuffix(strings.ToLower(f), ".md") || goModFiles[path.Base(f)] {
 		return nil, nil
 	}
 	if _, ok := ctx.Reg.ModuleOf(f); ok {
 		return nil, nil
 	}
 	p := filepath.Join(ctx.Root, filepath.FromSlash(f))
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxWiringFile {
+	fi, err := os.Lstat(p)
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() > maxWiringFile {
 		return nil, nil
 	}
-	data, ok, err := readRegular(p)
-	if err != nil || !ok || bytes.IndexByte(data, 0) >= 0 {
+	return readText(p, fi.Size())
+}
+
+// readText returns the content of the regular file p, or nil when its
+// first binarySniff bytes hold a NUL; a file that vanished is nil too.
+func readText(p string, size int64) ([]byte, error) {
+	fh, err := os.Open(p)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	return data, nil
+	defer fh.Close()
+	data := make([]byte, 0, size+1)
+	n, err := io.ReadFull(fh, data[:min(int64(binarySniff), size+1)])
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return nil, err
+	}
+	data = data[:n]
+	if bytes.IndexByte(data, 0) >= 0 {
+		return nil, nil
+	}
+	rest, err := io.ReadAll(fh)
+	if err != nil {
+		return nil, err
+	}
+	return append(data, rest...), nil
 }
 
 // leadingIdent is the text of an entry before its first ".", or the whole
