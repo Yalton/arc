@@ -171,13 +171,6 @@ func Superproject(dir string) (string, error) {
 	return filepath.Clean(filepath.FromSlash(sup)), nil
 }
 
-// SubmoduleStatus returns 'git status --porcelain' of the work tree in dir,
-// empty when it is clean.
-func SubmoduleStatus(dir string) (string, error) {
-	out, err := run(dir, nil, "--no-optional-locks", "status", "--porcelain")
-	return string(out), err
-}
-
 // Gitlinks returns the repo-relative paths of the submodule gitlinks in the
 // index (mode 160000), sorted.
 func Gitlinks(root string) ([]string, error) {

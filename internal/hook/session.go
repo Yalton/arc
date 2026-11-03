@@ -188,7 +188,7 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 			if _, err := os.Stat(filepath.Join(abs, ".git")); err != nil {
 				continue // not checked out
 			}
-			out, err := gitx.SubmoduleStatus(abs)
+			out, err := gitx.SubmoduleModified(abs)
 			if err != nil || out == "" {
 				continue
 			}

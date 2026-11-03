@@ -180,6 +180,11 @@ func TestShellWithBdCreateCombines(t *testing.T) {
 
 func TestShellModuleFeedback(t *testing.T) {
 	root := moduleRepo(t)
+	// A build writes an untracked generated file into the submodule: not an edit.
+	write(t, root, "addons/Kit/a.cs.uid", "uid://generated\n")
+	if d := Decide(shell(root, "s1"), now); strings.Contains(d.Feedback, "submodule") {
+		t.Fatalf("untracked file in a submodule: %+v", d)
+	}
 	// Submodule edited from a shell: gitlink shows dirty.
 	write(t, root, "addons/Kit/a.cs", "class A { int x; }\n")
 	d := Decide(shell(root, "s1"), now)

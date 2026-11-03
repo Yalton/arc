@@ -657,11 +657,13 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
     the same channel as unowned files: the pre-write deny reason followed by
     `Revert the change.`;
   - a module gitlink that the status lists runs `git -C <dir> status
-    --porcelain`; when that prints anything and differs from what the
-    session last recorded for the submodule, the feedback is `module <id>:
-    submodule has local changes; revert them in <dir> and use its public
-    surface: <entry list>.` A moved pointer with a clean work tree is not
-    reported. Files inside a submodule never appear in the superproject's
+    --porcelain --untracked-files=no`, as the gate does; when that prints
+    anything and differs from what the session last recorded for the
+    submodule, the feedback is `module <id>: submodule has local changes;
+    revert them in <dir> and use its public surface: <entry list>.` A moved
+    pointer with a clean work tree is not reported, and neither are
+    untracked files, because builds generate them there (Godot and dotnet
+    write `*.uid` and `*.import` files beside a kit's files). Files inside a submodule never appear in the superproject's
     status, so this is how shell edits to a submodule kit are seen.
 
   Module paths here are judged by the registry as it was in the session's
