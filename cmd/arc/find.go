@@ -24,7 +24,7 @@ func runFind(out *output, args []string) int {
 		return out.fail(exitUsage, "find: reading symbols: "+err.Error())
 	}
 	res := symbols.Find(r.reg, provides, query)
-	if len(res.Concepts) == 0 && len(res.Symbols) == 0 {
+	if len(res.Modules) == 0 && len(res.Concepts) == 0 && len(res.Symbols) == 0 {
 		out.result("find: nothing matches "+fmt.Sprintf("%q", query)+"; no existing concept or exported symbol covers it", res)
 		return exitViolations
 	}
@@ -34,6 +34,13 @@ func runFind(out *output, args []string) int {
 
 func findText(res symbols.FindResult) string {
 	var w strings.Builder
+	for _, m := range res.Modules {
+		fmt.Fprintf(&w, "- %s [module]", m.ID)
+		if m.Summary != "" {
+			w.WriteString(": " + m.Summary)
+		}
+		fmt.Fprintf(&w, " [%s]; %s\n", strings.Join(m.Why, ", "), m.Note)
+	}
 	if len(res.Concepts) > 0 {
 		w.WriteString("Concepts:\n")
 		for _, c := range res.Concepts {

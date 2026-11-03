@@ -14,8 +14,9 @@ import (
 
 // testRepo is a temp git repository with a registry.
 type testRepo struct {
-	t    *testing.T
-	root string
+	t        *testing.T
+	root     string
+	approved bool // gate runs with ARC_APPROVED=1
 }
 
 func newRepo(t *testing.T, registryYAML string) *testRepo {
@@ -77,7 +78,7 @@ func (r *testRepo) gate(mode string, only ...string) *Report {
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	ctx := &Context{Root: r.root, Reg: reg, Files: files, Now: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)}
+	ctx := &Context{Root: r.root, Reg: reg, Files: files, Approved: r.approved, Now: time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)}
 	baseRev := "HEAD"
 	switch mode {
 	case "staged":

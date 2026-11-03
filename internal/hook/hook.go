@@ -86,7 +86,7 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		}
 		abs[i] = filepath.Clean(p)
 	}
-	root, err := findRoot(filepath.Dir(abs[0]))
+	root, err := findRoot(abs[0])
 	if err != nil {
 		return Decision{}, nil // not in a repository arc manages
 	}
@@ -108,6 +108,9 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		_, statErr := os.Stat(p)
 		isNew := errors.Is(statErr, os.ErrNotExist)
 		switch res.Status {
+		case brief.StatusModule:
+			m, _ := reg.ModuleOf(rel)
+			return Decision{Deny: true, Reason: m.EditDenial(rel)}, nil
 		case brief.StatusUnowned:
 			if isNew {
 				return Decision{Deny: true, Reason: "arc: " + brief.PlaceMessage(res) +
@@ -137,6 +140,9 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 	text, err := briefContext(root, reg, fresh, again, "the code you are editing", now)
 	if err != nil {
 		return Decision{}, err
+	}
+	if line := st.modulesLine(reg); line != "" {
+		text = strings.TrimSpace(line + "\n\n" + text)
 	}
 	if err := st.save(); err != nil {
 		return Decision{Context: text}, err
@@ -359,12 +365,17 @@ func triageBeads(root string, reg *registry.Registry, ids []string, now time.Tim
 	return d, nil
 }
 
-// findRoot returns the git top-level containing dir, walking up to the
-// nearest existing directory first (the target directory may be new).
-func findRoot(dir string) (string, error) {
+// findRoot returns the repository root arc applies to for target (a file
+// or directory), resolved from its nearest existing directory (the target
+// and its directory may be new). It is the git top-level, unless that has
+// no registry, is a submodule, and target is under a module of the
+// superproject's registry (SPEC.md, "arc hook"). Any other submodule
+// resolves to itself, as in a repository without arc.
+func findRoot(target string) (string, error) {
+	dir := target
 	for {
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return gitx.Root(dir)
+			break
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -372,6 +383,34 @@ func findRoot(dir string) (string, error) {
 		}
 		dir = parent
 	}
+	top, err := gitx.Root(dir)
+	if err != nil || hasRegistry(top) {
+		return top, err
+	}
+	// Only a submodule (or linked worktree) has a .git file; a plain
+	// repository's .git is a directory and has no superproject to ask.
+	if fi, err := os.Lstat(filepath.Join(top, ".git")); err != nil || fi.IsDir() {
+		return top, nil
+	}
+	sup, err := gitx.Superproject(dir)
+	if err != nil || sup == "" {
+		return top, nil
+	}
+	reg, err := registry.Load(sup)
+	if err != nil {
+		return top, nil
+	}
+	if rel, ok := gitx.Rel(sup, target); ok {
+		if _, ok := reg.ModuleOf(rel); ok {
+			return sup, nil
+		}
+	}
+	return top, nil
+}
+
+func hasRegistry(root string) bool {
+	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(registry.Path)))
+	return err == nil
 }
 
 func contains(xs []string, x string) bool {

@@ -19,7 +19,7 @@ const (
 // approve its own work: added or promoted concepts, removed or loosened
 // boundaries, removed rules, extended flag expiries and removal deadlines,
 // widened concept paths, a widened ignore list and raised or removed size
-// limits. It runs only with --base (CI on pull
+// limits, and removed or narrowed modules. It runs only with --base (CI on pull
 // requests), so local modes can still propose such changes, and only when
 // the base has a registry (adoption is not judged). Widening is judged on
 // the files in the tree: a pattern set widens when it now matches a file it
@@ -29,18 +29,25 @@ func checkApproval(ctx *Context) ([]Finding, error) {
 		return nil, nil
 	}
 	if ctx.Approved {
-		return []Finding{{
-			Severity: Info,
-			Path:     registry.Path,
-			Message:  "skipped: " + ApprovedEnv + "=1 (pull request labelled " + ApprovalLabel + ")",
-		}}, nil
+		return []Finding{approvedSkip()}, nil
 	}
 	a := approval{files: ctx.Files}
 	a.concepts(ctx.BaseReg, ctx.Reg)
 	a.boundaries(ctx.BaseReg, ctx.Reg)
 	a.deadlines(ctx.BaseReg, ctx.Reg)
 	a.loosened(ctx.BaseReg, ctx.Reg)
+	a.modules(ctx.BaseReg, ctx.Reg)
 	return a.out, nil
+}
+
+// approvedSkip is the info line of a check skipped because a maintainer
+// approved the pull request.
+func approvedSkip() Finding {
+	return Finding{
+		Severity: Info,
+		Path:     registry.Path,
+		Message:  "skipped: " + ApprovedEnv + "=1 (pull request labelled " + ApprovalLabel + ")",
+	}
 }
 
 type approval struct {
@@ -147,6 +154,27 @@ func (a *approval) loosened(base, head *registry.Registry) {
 	}
 	limit("file_lines", base.Limits.FileLines, head.Limits.FileLines)
 	limit("function_lines", base.Limits.FunctionLines, head.Limits.FunctionLines)
+}
+
+// modules reports module entries removed and modules whose paths no longer
+// cover a file they covered; either drops a guardrail. Adding or widening
+// a module is not listed.
+func (a *approval) modules(base, head *registry.Registry) {
+	for _, old := range base.Modules {
+		var m *registry.Module
+		for i := range head.Modules {
+			if head.Modules[i].ID == old.ID {
+				m = &head.Modules[i]
+			}
+		}
+		if m == nil {
+			a.add("modules["+old.ID+"]", "module %s removed", old.ID)
+			continue
+		}
+		if f, n := widened(a.files, m.Paths, old.Paths); f != "" {
+			a.add("modules["+old.ID+"].paths", "module %s paths narrowed, no longer covering %s%s", old.ID, f, more(n))
+		}
+	}
 }
 
 func boundary(r *registry.Registry, id string) *registry.Boundary {

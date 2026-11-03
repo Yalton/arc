@@ -18,7 +18,7 @@ var version string
 
 var commands = []string{
 	"init", "place", "brief", "find", "gate", "baseline", "render",
-	"hook", "triage", "audit", "validate", "version",
+	"hook", "triage", "audit", "validate", "module", "version",
 }
 
 // handlers maps implemented commands to their entry points.
@@ -30,6 +30,7 @@ var handlers = map[string]func(*output, []string) int{
 	"find":     runFind,
 	"hook":     runHook,
 	"init":     runInit,
+	"module":   runModule,
 	"place":    runPlace,
 	"render":   runRender,
 	"triage":   runTriage,

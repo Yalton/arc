@@ -1,0 +1,28 @@
+# Registry for the demo project.
+version: 1
+
+system:
+  name: demo # the name
+  summary: Demo.
+
+concepts:
+  # the game itself
+  - id: game
+    name: Game
+    summary: The game.
+    paths: ["src/**"]
+
+limits:
+  file_lines: 1000 # keep files short
+modules:
+  - id: Kit
+    summary: A kit.
+    paths:
+      - addons/Kit/**
+    covers:
+      - widgets
+    entry:
+      - Kit
+    rules:
+      - Never edit.
+    source: dir:../Kit

@@ -61,7 +61,7 @@ concepts:
     reason: The registry is the single source of truth; every command reads it through one loader and validator.
     rules:
       - Unknown YAML keys are errors.
-      - Ownership overlap is a validation error; no most-specific-glob wins.
+      - Module paths take precedence over concept paths; concepts never overlap each other (a validation error; no most-specific-glob wins).
       - Never touch text outside the arc markers.
 
   - id: gitx

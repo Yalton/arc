@@ -94,7 +94,7 @@ func checkStructure(ctx *Context) ([]Finding, error) {
 
 	var out []Finding
 	for _, fc := range ctx.Changes.Files {
-		if ctx.Reg.IsIgnored(fc.Path) {
+		if _, ok := ctx.Reg.ModuleOf(fc.Path); ok || ctx.Reg.IsIgnored(fc.Path) {
 			continue
 		}
 		owner := ctx.Reg.Owner(fc.Path)

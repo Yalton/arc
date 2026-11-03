@@ -330,6 +330,27 @@ func TestWorkingChangeSet(t *testing.T) {
 	}
 }
 
+// A dirty submodule is not listed: the status must not visit submodule
+// work trees on every hook call (the hook asks module submodules itself).
+func TestWorktreeStatusIgnoresSubmodules(t *testing.T) {
+	seed := newRepo(t)
+	write(t, seed, "a.cs", "a\n")
+	commitAll(t, seed, "seed")
+	root := newRepo(t)
+	write(t, root, "x.go", "a\n")
+	commitAll(t, root, "init")
+	git(t, root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", seed, "sub")
+	commitAll(t, root, "sub")
+	write(t, root, "sub/a.cs", "edited\n")
+	got, err := WorktreeStatus(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %v, want nothing", got)
+	}
+}
+
 func TestWorktreeStatus(t *testing.T) {
 	root := newRepo(t)
 	write(t, root, "keep.go", "a\n")

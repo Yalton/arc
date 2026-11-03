@@ -235,3 +235,32 @@ func TestAnalyzeExistingCodeMayCover(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+const moduleRegistry = triageRegistry + `modules:
+  - id: kit
+    summary: Mouse cursor helpers.
+    paths: ["addons/Kit/**"]
+    covers: [mouse cursor stack]
+    entry: [CursorKit.set_cursor]
+`
+
+func TestAnalyzeModuleCovers(t *testing.T) {
+	reg, err := registry.Parse([]byte(moduleRegistry))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := Bead{ID: "t-1", Title: "Add a mouse cursor stack", Description: goodDesc}
+	r := Analyze(reg, nil, b, now)
+	if r.Label != LabelReview || !reflect.DeepEqual(r.Reasons, []string{"module kit covers this"}) {
+		t.Fatalf("got %+v", r)
+	}
+	b.Description = strings.Replace(goodDesc, "internal/goal/export.go", "kit", 1)
+	if r := Analyze(reg, nil, b, now); r.Label != LabelOK {
+		t.Fatalf("closest names the module: %+v", r)
+	}
+	// Naming an entry wires the module; only covers match (SPEC "triage").
+	b = Bead{ID: "t-2", Title: "Call CursorKit.set_cursor from the menu", Description: goodDesc}
+	if r := Analyze(reg, nil, b, now); r.Label != LabelOK {
+		t.Fatalf("entry is not covers: %+v", r)
+	}
+}

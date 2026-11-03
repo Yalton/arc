@@ -104,6 +104,7 @@ var Checks = []Check{
 	{"flags", checkFlags},
 	{"removals", checkRemovals},
 	{"size", checkSize},
+	{"modules", checkModules},
 	{"drafts", checkDrafts},
 }
 

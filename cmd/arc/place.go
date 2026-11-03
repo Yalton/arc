@@ -65,8 +65,12 @@ func runBrief(out *output, args []string) int {
 	var concepts stringList
 	fs.Var(&concepts, "concept", "brief for these concept ids (repeatable)")
 	bead := fs.String("bead", "", "brief for the concepts a bead refers to")
+	modules := fs.Bool("modules", false, "list every installed module")
 	if err := fs.Parse(args); err != nil {
 		return out.fail(exitUsage, "brief: "+err.Error())
+	}
+	if *modules && (len(concepts) > 0 || fs.NArg() > 0 || *bead != "") {
+		return out.fail(exitUsage, "brief: --modules takes no other scope")
 	}
 	scopes := 0
 	for _, on := range []bool{len(concepts) > 0, fs.NArg() > 0, *bead != ""} {
@@ -81,12 +85,21 @@ func runBrief(out *output, args []string) int {
 	if err != nil {
 		return out.fail(exitUsage, err.Error())
 	}
+	if *modules {
+		b := brief.AllModules(r.reg)
+		text := strings.TrimRight(b.ModulesText(), "\n")
+		if text == "" {
+			text = "no modules"
+		}
+		out.result(text, b)
+		return exitOK
+	}
 	now := time.Now().UTC()
 	var b brief.Brief
 	whole := false // the whole-registry view omits provides
 	switch {
 	case *bead != "":
-		ids, err := beadConcepts(r, *bead)
+		ids, text, err := beadConcepts(r, *bead)
 		if err != nil {
 			return out.fail(exitUsage, "brief: --bead: "+err.Error())
 		}
@@ -96,6 +109,7 @@ func runBrief(out *output, args []string) int {
 		if b, err = brief.ForConcepts(r.reg, ids, now); err != nil {
 			return out.fail(exitUsage, "brief: "+err.Error())
 		}
+		b.AddModuleText(r.reg, text)
 	case len(concepts) > 0:
 		if b, err = brief.ForConcepts(r.reg, concepts, now); err != nil {
 			return out.fail(exitUsage, "brief: "+err.Error())
@@ -125,14 +139,15 @@ func runBrief(out *output, args []string) int {
 }
 
 // beadConcepts resolves the concepts a bead refers to, as triage does.
-func beadConcepts(r *repo, id string) ([]string, error) {
+func beadConcepts(r *repo, id string) ([]string, string, error) {
 	c, notice := beads.Open(r.root)
 	if c == nil {
-		return nil, errors.New(notice)
+		return nil, "", errors.New(notice)
 	}
 	b, err := c.Show(id)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return beads.Concepts(r.reg, b), nil
+	text := strings.Join([]string{b.Title, b.Description, b.Design, b.AcceptanceCriteria, b.Notes}, "\n")
+	return beads.Concepts(r.reg, b), text, nil
 }

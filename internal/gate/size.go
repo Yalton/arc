@@ -26,6 +26,9 @@ func checkSize(ctx *Context) ([]Finding, error) {
 		if fc.Status == gitx.Deleted || ctx.Reg.IsIgnored(fc.Path) {
 			continue
 		}
+		if _, ok := ctx.Reg.ModuleOf(fc.Path); ok {
+			continue
+		}
 		data, ok, err := ctx.ReadFile(fc.Path)
 		if err != nil {
 			return nil, err

@@ -30,7 +30,11 @@ type Brief struct {
 	Boundaries []BoundaryEntry `json:"boundaries,omitempty"`
 	Flags      []FlagEntry     `json:"flags,omitempty"`
 	Removals   []RemovalEntry  `json:"removals,omitempty"`
-	Note       string          `json:"note,omitempty"`
+	// Modules are the installed modules shown, capped at ModulesTokenCap;
+	// ModulesMore counts the ones cut.
+	Modules     []registry.Module `json:"modules,omitempty"`
+	ModulesMore int               `json:"modules_more,omitempty"`
+	Note        string            `json:"note,omitempty"`
 }
 
 type NonGoalEntry struct {
@@ -103,6 +107,7 @@ func ForPaths(reg *registry.Registry, paths []string, now time.Time) Brief {
 	b.Removals = removals(reg, now, func(rm registry.Removal) bool {
 		return ids[rm.ReplacedBy] || anyMatch(rm.Paths, paths)
 	})
+	b.setModules(scopedModules(reg, paths, b.Concepts, ""))
 	return b
 }
 
@@ -133,6 +138,7 @@ func ForConcepts(reg *registry.Registry, ids []string, now time.Time) (Brief, er
 	b.Removals = removals(reg, now, func(rm registry.Removal) bool {
 		return set[rm.ReplacedBy] || anyOverlap(rm.Paths, globs)
 	})
+	b.setModules(scopedModules(reg, nil, b.Concepts, ""))
 	return b, nil
 }
 
@@ -170,6 +176,7 @@ func Whole(reg *registry.Registry, now time.Time) Brief {
 	}
 	b.Flags = activeFlags(reg, nil, now)
 	b.Removals = removals(reg, now, func(registry.Removal) bool { return true })
+	b.setModules(reg.Modules)
 	return b
 }
 
@@ -229,6 +236,7 @@ func (b Brief) Text() string {
 			fmt.Fprintf(&w, "- %s: %s (%s)\n", r.ID, r.What, joinNonEmpty(repl, by, r.Bead))
 		}
 	}
+	b.writeModules(&w)
 	if b.Note != "" {
 		w.WriteString(b.Note + "\n")
 	}

@@ -1,0 +1,34 @@
+{
+  "modules": [
+    {
+      "id": "GodotKit",
+      "summary": "Reusable Godot UI widgets.",
+      "paths": [
+        "addons/GodotKit/**"
+      ],
+      "covers": [
+        "ui widgets",
+        "menus"
+      ],
+      "entry": [
+        "GodotKit",
+        "addons/GodotKit/api.gd"
+      ],
+      "rules": [
+        "Use the public API; never edit files under addons/GodotKit."
+      ],
+      "source": "dir:../kits/GodotKit"
+    },
+    {
+      "id": "cobra",
+      "summary": "CLI framework for Go.",
+      "covers": [
+        "command line parsing"
+      ],
+      "entry": [
+        "cobra.Command"
+      ],
+      "import": "github.com/spf13/cobra"
+    }
+  ]
+}

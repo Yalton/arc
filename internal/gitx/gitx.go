@@ -136,7 +136,9 @@ type DirtyPath struct {
 
 // WorktreeStatus lists every path that differs from HEAD in the index or
 // the working tree, untracked files included one by one and ignored files
-// left out, with renames reported as an add plus a delete. It is one
+// left out, with renames reported as an add plus a delete. Submodules are
+// left out (--ignore-submodules=all), so git does not visit each one's work
+// tree; SubmoduleModified asks one directly. It is one
 // 'git status --porcelain -z' call and takes no optional locks, so it is
 // safe to run while an agent's own git commands are in flight.
 func WorktreeStatus(root string) ([]DirtyPath, error) {
@@ -153,4 +155,44 @@ func WorktreeStatus(root string) ([]DirtyPath, error) {
 		paths = append(paths, DirtyPath{Path: rec[3:], Code: rec[:2]})
 	}
 	return paths, nil
+}
+
+// Superproject returns the work tree of the repository that contains dir as
+// a submodule, or "" when dir is not inside a submodule (git prints nothing
+// and exits 0 then).
+func Superproject(dir string) (string, error) {
+	out, err := run(dir, nil, "rev-parse", "--show-superproject-working-tree")
+	if err != nil {
+		return "", err
+	}
+	sup := strings.TrimRight(string(out), "\r\n")
+	if sup == "" {
+		return "", nil
+	}
+	return filepath.Clean(filepath.FromSlash(sup)), nil
+}
+
+// Gitlinks returns the repo-relative paths of the submodule gitlinks in the
+// index (mode 160000), sorted.
+func Gitlinks(root string) ([]string, error) {
+	out, err := run(root, nil, "ls-files", "-s", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var links []string
+	for _, e := range splitZ(out) {
+		// "<mode> <object> <stage>\t<path>"
+		if tab := strings.IndexByte(e, '\t'); tab >= 0 && strings.HasPrefix(e, "160000 ") {
+			links = append(links, e[tab+1:])
+		}
+	}
+	return sortedUnique(links, nil), nil
+}
+
+// SubmoduleModified returns 'git status --porcelain --untracked-files=no'
+// of the work tree in dir: its modified tracked files, empty when there
+// are none.
+func SubmoduleModified(dir string) (string, error) {
+	out, err := run(dir, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	return string(out), err
 }

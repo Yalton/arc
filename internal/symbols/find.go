@@ -22,13 +22,34 @@ const (
 	weightDoc  = 3 // symbol doc
 	weightText = 2 // concept summary, reason or rules
 	weightPath = 2 // symbol file path segments
+
+	weightCovers = 4 // module covers (id and entry weigh weightName)
 )
+
+// MaxModuleMatches caps the modules Find returns.
+const MaxModuleMatches = 3
+
+// ModuleNote is the instruction that goes with every module hit.
+const ModuleNote = "use this; do not reimplement"
 
 // FindResult is the answer to 'arc find'.
 type FindResult struct {
 	Query    []string       `json:"query"` // query words used, stopwords dropped
+	Modules  []ModuleMatch  `json:"modules"`
 	Concepts []ConceptMatch `json:"concepts"`
 	Symbols  []SymbolMatch  `json:"symbols"`
+}
+
+// ModuleMatch is an installed module matching the query: the work is
+// already done, so it is listed before concepts and symbols.
+type ModuleMatch struct {
+	ID      string   `json:"id"`
+	Summary string   `json:"summary,omitempty"`
+	Entry   []string `json:"entry,omitempty"`
+	Score   int      `json:"score"`
+	Why     []string `json:"why"`
+	Kind    string   `json:"kind"` // always "module"
+	Note    string   `json:"note"` // always ModuleNote
 }
 
 // ConceptMatch is a concept matching the query; Why lists each matched
@@ -60,9 +81,26 @@ func Find(reg *registry.Registry, provides map[string][]Symbol, query string) Fi
 			q, orig = append(q, st), append(orig, w)
 		}
 	}
-	res := FindResult{Query: orig, Concepts: []ConceptMatch{}, Symbols: []SymbolMatch{}}
+	res := FindResult{Query: orig, Modules: []ModuleMatch{}, Concepts: []ConceptMatch{}, Symbols: []SymbolMatch{}}
 	if len(q) == 0 {
 		return res
+	}
+	for _, m := range reg.Modules {
+		fields := []field{
+			{"id", Tokens(m.ID), weightName},
+			{"entry", Tokens(strings.Join(m.Entry, " ")), weightName},
+			{"covers", Tokens(strings.Join(m.Covers, " ")), weightCovers},
+			{"summary", Tokens(m.Summary), weightText},
+			{"rules", Tokens(strings.Join(m.Rules, " ")), weightText},
+		}
+		if score, why := scoreFields(q, orig, fields); score > 0 {
+			res.Modules = append(res.Modules, ModuleMatch{ID: m.ID, Summary: oneLine(m.Summary), Entry: m.Entry,
+				Score: score, Why: why, Kind: "module", Note: ModuleNote})
+		}
+	}
+	sort.SliceStable(res.Modules, func(i, j int) bool { return res.Modules[i].Score > res.Modules[j].Score })
+	if len(res.Modules) > MaxModuleMatches {
+		res.Modules = res.Modules[:MaxModuleMatches]
 	}
 	for _, c := range reg.Concepts {
 		fields := []field{

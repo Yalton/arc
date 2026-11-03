@@ -43,17 +43,27 @@ The architecture registry is ` + "`" + Path + "`" + `; ` + "`" + ArchitectureFil
 - After editing the registry, run ` + "`arc render`" + ` and ` + "`arc validate`" + `.
 `
 
+// modulesLines are the snippet rules that apply once the registry lists
+// installed modules (SPEC.md, "arc render"). They are fixed and generic.
+const modulesLines = "- Use an installed module (listed by `arc brief`) before writing your own version of what it covers.\n" +
+	"- Never edit files inside an installed module; configure or wrap it through its public surface.\n" +
+	"- Wire every installed module into the program's real entry point.\n"
+
 // beadsLine tells agents the bead template arc triage checks. It is part
 // of the snippet only when the registry sets beads: true.
 const beadsLine = "- When filing a bead, include `Replaces / removes:`, `Concepts touched:` (registry concept ids, comma-separated) and `Closest existing thing:` lines; `arc triage` checks them.\n"
 
-// Snippet returns the agent instruction block body; beads adds the bead
-// template line.
-func Snippet(beads bool) string {
-	if beads {
-		return snippet + beadsLine
+// Snippet returns the agent instruction block body; modules adds the
+// installed-module rules and beads the bead template line, in that order.
+func Snippet(beads, modules bool) string {
+	out := snippet
+	if modules {
+		out += modulesLines
 	}
-	return snippet
+	if beads {
+		out += beadsLine
+	}
+	return out
 }
 
 // RenderArchitecture returns the generated markdown for ARCHITECTURE.md's
@@ -99,6 +109,18 @@ func (r *Registry) RenderArchitecture() string {
 			}
 			row(&b, id, codeList(c.Paths), strings.Join(c.Storage, ", "),
 				strings.Join(c.Env, ", "), summary)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(r.Modules) > 0 {
+		b.WriteString("### Modules\n\n| Module | Summary | Paths | Entry | Rules |\n|---|---|---|---|---|\n")
+		for _, m := range r.Modules {
+			entry := codeList(m.Entry)
+			if len(m.Entry) == 0 && m.Surface() != "" {
+				entry = "`" + m.Surface() + "`"
+			}
+			row(&b, m.ID, oneLine(m.Summary), codeList(m.Paths), entry, oneLine(strings.Join(m.Rules, "; ")))
 		}
 		b.WriteString("\n")
 	}
@@ -212,7 +234,7 @@ func (r *Registry) plan(root string) ([]planned, error) {
 	if err := add(ArchitectureFile, r.RenderArchitecture(), architectureHeader, true); err != nil {
 		return nil, err
 	}
-	body := Snippet(r.Beads)
+	body := Snippet(r.Beads, len(r.Modules) > 0)
 	for i, f := range SnippetFiles {
 		if err := add(f, body, "", i == 0); err != nil {
 			return nil, err
