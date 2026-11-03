@@ -86,7 +86,7 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		}
 		abs[i] = filepath.Clean(p)
 	}
-	root, err := findRoot(filepath.Dir(abs[0]))
+	root, err := findRoot(abs[0])
 	if err != nil {
 		return Decision{}, nil // not in a repository arc manages
 	}
@@ -365,11 +365,14 @@ func triageBeads(root string, reg *registry.Registry, ids []string, now time.Tim
 	return d, nil
 }
 
-// findRoot returns the repository root arc applies to for dir, walking up
-// to the nearest existing directory first (the target directory may be
-// new). It is the git top-level, unless that has no registry and dir is in
-// a submodule whose superproject has one (SPEC.md, "arc hook").
-func findRoot(dir string) (string, error) {
+// findRoot returns the repository root arc applies to for target (a file
+// or directory), resolved from its nearest existing directory (the target
+// and its directory may be new). It is the git top-level, unless that has
+// no registry, is a submodule, and target is under a module of the
+// superproject's registry (SPEC.md, "arc hook"). Any other submodule
+// resolves to itself, as in a repository without arc.
+func findRoot(target string) (string, error) {
+	dir := target
 	for {
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
 			break
@@ -384,8 +387,23 @@ func findRoot(dir string) (string, error) {
 	if err != nil || hasRegistry(top) {
 		return top, err
 	}
-	if sup, err := gitx.Superproject(dir); err == nil && sup != "" && hasRegistry(sup) {
-		return sup, nil
+	// Only a submodule (or linked worktree) has a .git file; a plain
+	// repository's .git is a directory and has no superproject to ask.
+	if fi, err := os.Lstat(filepath.Join(top, ".git")); err != nil || fi.IsDir() {
+		return top, nil
+	}
+	sup, err := gitx.Superproject(dir)
+	if err != nil || sup == "" {
+		return top, nil
+	}
+	reg, err := registry.Load(sup)
+	if err != nil {
+		return top, nil
+	}
+	if rel, ok := gitx.Rel(sup, target); ok {
+		if _, ok := reg.ModuleOf(rel); ok {
+			return sup, nil
+		}
 	}
 	return top, nil
 }

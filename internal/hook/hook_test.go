@@ -376,3 +376,35 @@ func TestModuleOwnRegistrySubmoduleKeepsOwn(t *testing.T) {
 		t.Fatalf("inner registry must win: %+v", d)
 	}
 }
+
+// The review's repro: a plain submodule (not a module) inside a project
+// with a registry is not judged by the project's registry, as before
+// modules existed: the superproject tracks only its gitlink.
+func TestPlainSubmoduleNotJudgedBySuperproject(t *testing.T) {
+	bare := filepath.Join(t.TempDir(), "lib.git")
+	seed := t.TempDir()
+	git(t, seed, "init", "-q")
+	write(t, seed, "lib.c", "int x;\n")
+	git(t, seed, "add", "-A")
+	git(t, seed, "commit", "-q", "-m", "lib")
+	git(t, filepath.Dir(bare), "clone", "-q", "--bare", seed, bare)
+	super := newRepo(t) // concept internal/goal/** only
+	git(t, super, "-c", "protocol.file.allow=always", "submodule", "add", "-q", bare, "third/lib")
+	git(t, super, "commit", "-q", "-m", "lib")
+	if d := Decide(pre(super, "s", "third/lib/new.c"), now); d != (Decision{}) {
+		t.Fatalf("write from the superproject: %+v", d)
+	}
+	lib := filepath.Join(super, "third/lib")
+	if d := Decide(Event{Kind: PreWrite, SessionID: "s", Cwd: lib, Paths: []string{"new/dir/x.c"}}, now); d != (Decision{}) {
+		t.Fatalf("write from inside: %+v", d)
+	}
+	write(t, super, "third/lib/made.c", "int y;\n")
+	if d := Decide(shell(lib, "s"), now); d != (Decision{}) {
+		t.Fatalf("shell inside: %+v", d)
+	}
+	// A module under the same superproject still resolves to it.
+	write(t, super, ".arch/registry.yaml", testRegistry+"modules:\n  - {id: lib, summary: L., paths: [\"third/lib/**\"], entry: [lib_init]}\n")
+	if d := Decide(pre(super, "s", "third/lib/new.c"), now); !d.Deny || !strings.HasPrefix(d.Reason, "third/lib/new.c is inside installed module lib") {
+		t.Fatalf("module: %+v", d)
+	}
+}

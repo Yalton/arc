@@ -221,7 +221,9 @@ func TestShellModuleRegisteredByCommandGetsNoFeedback(t *testing.T) {
 	if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
 		t.Fatalf("registered by the command: %+v", d)
 	}
-	// Edited afterwards, it is a module.
+	// Committed, then edited, it is a module.
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "install fresh")
 	write(t, root, "third/fresh/f.go", "package fresh\n\nvar Z = 1\n")
 	if d := Decide(shell(root, "s1"), now); !strings.Contains(d.Feedback, "installed module fresh") {
 		t.Fatalf("later edit: %+v", d)
@@ -234,5 +236,61 @@ func TestShellModuleFirstCommandJudgedByHead(t *testing.T) {
 	write(t, root, "vendor/lib/x.go", "package lib\n\nvar X = 1\n")
 	if d := Decide(shell(root, "s1"), now); !strings.Contains(d.Feedback, "installed module lib") {
 		t.Fatalf("HEAD registry: %+v", d)
+	}
+}
+
+// New files under a vendored module path are generated ones (Godot's
+// *.uid and *.import), as in the gate; modified and deleted tracked files
+// are edits.
+func TestShellModuleNewFilesGetNoFeedback(t *testing.T) {
+	root := moduleRepo(t)
+	Decide(shell(root, "s1"), now) // snapshot
+	write(t, root, "vendor/lib/x.go.uid", "uid://generated\n")
+	write(t, root, "vendor/lib/icon.png.import", "[remap]\n")
+	write(t, root, "vendor/lib/staged.go", "package lib\n")
+	git(t, root, "add", "vendor/lib/staged.go")
+	if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+		t.Fatalf("new files: %+v", d)
+	}
+	os.Remove(filepath.Join(root, "vendor/lib/x.go"))
+	d := Decide(shell(root, "s1"), now)
+	if !strings.Contains(d.Feedback, "vendor/lib/x.go is inside installed module lib; do not edit it.") ||
+		!strings.HasSuffix(d.Feedback, "Revert the change.") {
+		t.Fatalf("deleted: %+v", d)
+	}
+	if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+		t.Fatalf("deleted, repeat: %+v", d)
+	}
+}
+
+// countSubmoduleGit counts the git commands moduleSubmodules runs.
+func countSubmoduleGit(t *testing.T) *int {
+	t.Helper()
+	n := new(int)
+	gl, sm := gitlinks, submoduleModified
+	gitlinks = func(root string) ([]string, error) { *n++; return gl(root) }
+	submoduleModified = func(dir string) (string, error) { *n++; return sm(dir) }
+	t.Cleanup(func() { gitlinks, submoduleModified = gl, sm })
+	return n
+}
+
+func TestShellNoModulesRunsNoSubmoduleGit(t *testing.T) {
+	root := moduleRepo(t)
+	write(t, root, ".arch/registry.yaml", testRegistry)
+	git(t, root, "commit", "-q", "-am", "no modules")
+	write(t, root, "addons/Kit/a.cs", "class A { int x; }\n")
+	n := countSubmoduleGit(t)
+	if d := Decide(shell(root, "s1"), now); strings.Contains(d.Feedback, "submodule") || *n != 0 {
+		t.Fatalf("got %+v after %d submodule git commands", d, *n)
+	}
+}
+
+func TestShellModulesCheckEachModuleSubmodule(t *testing.T) {
+	root := moduleRepo(t)
+	write(t, root, "addons/Kit/a.cs", "class A { int x; }\n")
+	n := countSubmoduleGit(t)
+	d := Decide(shell(root, "s1"), now)
+	if !strings.Contains(d.Feedback, "module Kit: submodule has local changes") || *n != 2 {
+		t.Fatalf("got %+v after %d git commands, want ls-files and one status", d, *n)
 	}
 }

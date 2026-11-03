@@ -136,13 +136,14 @@ type DirtyPath struct {
 
 // WorktreeStatus lists every path that differs from HEAD in the index or
 // the working tree, untracked files included one by one and ignored files
-// left out, with renames reported as an add plus a delete. A submodule is
-// listed as its gitlink path when its pointer moved or its work tree is dirty. It is one
+// left out, with renames reported as an add plus a delete. Submodules are
+// left out (--ignore-submodules=all), so git does not visit each one's work
+// tree; SubmoduleModified asks one directly. It is one
 // 'git status --porcelain -z' call and takes no optional locks, so it is
 // safe to run while an agent's own git commands are in flight.
 func WorktreeStatus(root string) ([]DirtyPath, error) {
 	out, err := run(root, nil, "--no-optional-locks", "status", "--porcelain=v1", "-z",
-		"--untracked-files=all", "--no-renames")
+		"--untracked-files=all", "--no-renames", "--ignore-submodules=all")
 	if err != nil {
 		return nil, err
 	}

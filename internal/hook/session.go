@@ -143,6 +143,53 @@ func (st *sessionState) save() error {
 	return os.Rename(tmp, st.path)
 }
 
+// Seams for tests that count the git commands module submodules cost.
+var (
+	gitlinks          = gitx.Gitlinks
+	submoduleModified = gitx.SubmoduleModified
+)
+
+// moduleSubmodules checks each checked-out gitlink under a module of reg
+// (the snapshot registry) for modified tracked files, as the gate does: the
+// shell status leaves submodules out. It returns the status output per
+// submodule, to store with the snapshot, and feedback for each whose
+// output differs from what the session last recorded. A registry without
+// modules runs no git command.
+func moduleSubmodules(root string, reg *registry.Registry, st *sessionState) (map[string]string, []string) {
+	subs := map[string]string{}
+	if len(reg.Modules) == 0 {
+		return subs, nil
+	}
+	links, err := gitlinks(root)
+	if err != nil {
+		return subs, nil
+	}
+	var feedback []string
+	for _, l := range links {
+		m, ok := reg.ModuleOf(l)
+		if !ok {
+			continue
+		}
+		abs := filepath.Join(root, filepath.FromSlash(l))
+		if _, err := os.Stat(filepath.Join(abs, ".git")); err != nil {
+			continue // not checked out
+		}
+		out, err := submoduleModified(abs)
+		if err != nil || out == "" {
+			continue
+		}
+		subs[l] = out
+		if st.Submodules[l] != out {
+			surface := ""
+			if s := m.Surface(); s != "" {
+				surface = " and use its public surface: " + s
+			}
+			feedback = append(feedback, "module "+m.ID+": "+registry.SubmoduleDirty+"; revert them in "+l+surface+".")
+		}
+	}
+	return subs, feedback
+}
+
 // firstShellWindow bounds what the first shell command of a session is
 // held responsible for: with no snapshot to compare against, a dirty file
 // counts as changed by it only when modified this recently. Older dirty
@@ -175,30 +222,21 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 	cutoff := time.Now().Add(-firstShellWindow) // file times are wall clock; now dates the brief
 	before := st.snapshotRegistry(root)
 	snap := make(map[string]string, len(entries))
-	subs := map[string]string{}
-	var concepts, created, unowned, moduleFeedback []string
+	subs, moduleFeedback := moduleSubmodules(root, before, st)
+	var concepts, created, unowned []string
 	for _, e := range entries {
+		isNew := e.Code == "??" || e.Code[0] == 'A'
 		abs := filepath.Join(root, filepath.FromSlash(e.Path))
 		fi, err := os.Lstat(abs)
 		if err != nil {
-			continue
-		}
-		if m, ok := before.ModuleOf(e.Path); ok && fi.IsDir() {
-			// A submodule's gitlink: its files never appear in this status.
-			if _, err := os.Stat(filepath.Join(abs, ".git")); err != nil {
-				continue // not checked out
-			}
-			out, err := gitx.SubmoduleModified(abs)
-			if err != nil || out == "" {
-				continue
-			}
-			subs[e.Path] = out
-			if st.Submodules[e.Path] != out {
-				surface := ""
-				if s := m.Surface(); s != "" {
-					surface = " and use its public surface: " + s
+			// A deleted vendored file is an edit; it has no time to
+			// date, so the first command of a session never blames it.
+			if m, ok := before.ModuleOf(e.Path); ok && !isNew && strings.ContainsRune(e.Code, 'D') {
+				sig := e.Code + " deleted"
+				snap[e.Path] = sig
+				if !first && st.Snapshot[e.Path] != sig {
+					moduleFeedback = append(moduleFeedback, m.EditDenial(e.Path)+" Revert the change.")
 				}
-				moduleFeedback = append(moduleFeedback, "module "+m.ID+": submodule has local changes; revert them in "+e.Path+surface+".")
 			}
 			continue
 		}
@@ -210,9 +248,12 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 		if first && fi.ModTime().Before(cutoff) || !first && st.Snapshot[e.Path] == sig {
 			continue
 		}
-		isNew := e.Code == "??" || e.Code[0] == 'A'
 		if m, ok := before.ModuleOf(e.Path); ok {
-			moduleFeedback = append(moduleFeedback, m.EditDenial(e.Path)+" Revert the change.")
+			// New files there are generated ones (Godot's *.uid and
+			// *.import), as in the gate; pre-write denies agent ones.
+			if !isNew {
+				moduleFeedback = append(moduleFeedback, m.EditDenial(e.Path)+" Revert the change.")
+			}
 			continue
 		}
 		res := brief.Place(reg, e.Path)

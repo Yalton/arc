@@ -618,9 +618,15 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
   --show-toplevel` of the target (or cwd). When that has no
   `.arch/registry.yaml`, arc asks `git rev-parse
   --show-superproject-working-tree` (empty output, exit 0, outside a
-  submodule) and uses the superproject when it has a registry. So a write
-  inside a submodule kit finds the project's registry, and a repository with
-  its own registry that is itself a submodule keeps its own. A target in a
+  submodule) and uses the superproject only when it has a registry and the
+  target, as a path relative to the superproject, is under the paths of
+  one of that registry's modules. So a write inside a submodule kit finds
+  the project's registry; a repository with its own registry that is
+  itself a submodule keeps its own; and any other submodule (a plain
+  vendored library, docs) has no registry, so arc stays silent there as it
+  does in any repository without one. The superproject is only asked when
+  the top-level's `.git` is a file (a submodule's or linked worktree's),
+  not a directory. A target in a
   directory that does not exist yet resolves from its nearest existing
   ancestor. The target is then matched against modules and concepts as a
   path relative to the resolved root (for `addons/Kit/a.cs` written from
@@ -642,13 +648,14 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
   hook (nor does opencode), so this is the session-start channel.
 - **After any shell command:** find the files it changed, with one
   `git --no-optional-locks status --porcelain=v1 -z --untracked-files=all
-  --no-renames` call compared with the session's snapshot of dirty paths
+  --no-renames --ignore-submodules=all` call compared with the session's snapshot of dirty paths
   (porcelain code, modification time and size per path, kept in the same
   `.arch/cache/` state file as the briefed concepts). A dirty path whose
   signature differs from the snapshot counts as changed; on the session's
   first shell command, when there is no snapshot yet, only paths modified
   in the last 10 minutes count, so files that were dirty before the session
-  are not blamed on it. Deleted paths and non-regular files are skipped.
+  are not blamed on it. Deleted paths and non-regular files are skipped,
+  except as below for module paths.
   Of the changed files:
   - a new file (untracked or added to the index) that no concept owns gets
     feedback listing the `place` message of each (at most 10, then a count):
@@ -663,11 +670,21 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
   - owned files get the same added context as a write: the brief of each
     concept not briefed this session, and a concept's provides again for a
     new file in an already briefed concept;
-  - a changed file under a module path (a vendored copy) gets feedback, on
-    the same channel as unowned files: the pre-write deny reason followed by
-    `Revert the change.`;
-  - a module gitlink that the status lists runs `git -C <dir> status
-    --porcelain --untracked-files=no`, as the gate does; when that prints
+  - a modified or deleted tracked file under a module path (a vendored
+    copy) gets feedback, on the same channel as unowned files: the
+    pre-write deny reason followed by `Revert the change.` A deleted file
+    has no modification time, so it counts as changed when its porcelain
+    code differs from the snapshot, and not on the session's first shell
+    command. A new file (untracked or added to the index) under a module
+    path gets none, as in the gate: tools generate files there (Godot's
+    `*.uid` and `*.import`), and the pre-write hook still denies files an
+    agent writes;
+  - submodules are not in the status above (`--ignore-submodules=all`
+    keeps git from visiting every submodule work tree on each command).
+    When the snapshot registry (below) has modules, arc lists the gitlinks
+    (`git ls-files -s`) and, for each checked-out one under a module's
+    paths, runs `git -C <dir> status --porcelain --untracked-files=no`, as
+    the gate does; a registry with no modules runs neither. When that prints
     anything and differs from what the session last recorded for the
     submodule, the feedback is `module <id>: submodule has local changes;
     revert them in <dir> and use its public surface: <entry list>.` A moved
