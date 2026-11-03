@@ -10,6 +10,8 @@ architecture registry and:
 - fails commits and CI when new structure lands without a registry entry, when
   boundaries are crossed, when flags or scheduled removals expire, or when dead
   code or oversized code is added (`gate`);
+- protects installed third-party modules: writes inside them are refused,
+  and the gate fails when one is edited or left unwired (`modules`);
 - checks beads against the registry and enriches them when beads is installed
   (`triage`);
 - produces a deterministic drift report for an architect agent (`audit`).
@@ -120,6 +122,17 @@ removals:
     remove_by: 2026-11-15
     bead: vap-130
 
+modules:                       # installed third-party code (see "Modules")
+  - id: CursorKit              # unique among modules
+    summary: Push/pop stack that owns the mouse cursor mode.
+    paths: ["addons/CursorKit/**"]   # installed files; may be empty (go modules)
+    covers:                    # what it replaces; matched by find, brief, triage
+      - a stack of mouse-mode owners for menus and overlays
+    entry: [InputModeManager.Instance, InputModeManager.Push]  # public surface
+    import: ""                 # go import path; wiring via go list -deps
+    rules: [Configure it through its autoload; never edit files under addons/CursorKit.]
+    source: artifactory        # free text: who manages this entry
+
 limits:
   file_lines: 1000
   function_lines: 150          # enforced for Go natively in v1
@@ -142,9 +155,72 @@ Validation rules (`arc validate`, also run by `gate`):
   except `removals[].paths` after the removal is done (then the entry must be
   deleted, see gate);
 - no file is owned by more than one concept (most specific glob does not win;
-  overlap is an error, so ownership stays unambiguous);
+  overlap is an error, so ownership stays unambiguous). Files under a module
+  path are left out of this check: module paths take precedence over concept
+  paths (see "Modules"), so a concept and a module never overlap, and two
+  concepts that meet only inside a module path do not either;
 - `expires` / `remove_by` are valid dates;
-- `beads`, when present, is a boolean (default `false`).
+- `beads`, when present, is a boolean (default `false`);
+- `modules`: unknown keys in an entry are errors, like everywhere else; `id`
+  is required, unique among modules and matches `[A-Za-z0-9][A-Za-z0-9._-]*`
+  (upper case allowed, so a module keeps its own name); every `paths` glob
+  matches at least one repository file, where a git submodule's gitlink path
+  `dir` counts as a match for `dir/**` (and for any glob that matches `dir`
+  itself); no file is under the paths of more than one module; each entry
+  has at least one of `entry` and `import`.
+
+### Modules
+
+A module is installed third-party code the project uses but never edits: a
+vendored copy, a git submodule, or a Go module (which lives outside the repo,
+so its `paths` are empty). Any tool or person may write module entries; arc
+reads nothing but the registry. Field names are lowercase and identical in
+YAML and in `--json` output (`id summary paths covers entry import rules
+source`); `--json` omits empty fields.
+
+- **Precedence.** Module paths win over concept paths. A concept glob such
+  as `**` may cover a module's folder, but a file under a module path
+  belongs to the module: `Owner(path)` returns no concept for it and
+  `ModuleOf(path)` returns the module. Matching uses the same globs as
+  concepts, and `dir/**` also matches the gitlink path `dir` of a
+  submodule, so the gitlink itself is a module path.
+- **Exemptions.** Third-party code is not judged by the project's rules.
+  Module paths are exempt from `placement`, `structure` and `size`, from
+  the post-shell unowned feedback and from `arc audit`'s unowned files.
+  `place` reports them as `module`. A clone whose two sides are both under
+  module paths is dropped by `dupl`/`jscpd` in the gate, `arc baseline` and
+  `audit`; a clone between a module file and a project file is kept, since
+  copying module code is what modules exist to prevent.
+- **Ignore.** `.gitmodules` is a built-in ignore, because `git submodule
+  add` writes it. A module path that is also ignored is still a module:
+  module protection is checked before ignore.
+- **Word matching.** `brief` and `triage` match modules against text with
+  `arc find`'s tokenizer (lowercase, camelCase and `snake_case` split,
+  stopwords dropped, crude stemming). A `covers` phrase matches text when at
+  least two distinct tokens of the phrase, and at least half of them, occur
+  in the text. An `entry` matches when its leading identifier (the text
+  before its first `.`, or the whole entry when there is none) occurs in the
+  text as a whole word, case-insensitively.
+- **Wiring.** A module is wired when either holds:
+  - `import` is set and `go list -deps` of the repository's main packages
+    (`go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...`, then
+    `go list -deps <mains>`, with network and toolchain downloads off as for
+    `boundaries`) lists `import` or a package under `import/`;
+  - an `entry`, or its leading identifier, occurs as a whole word
+    (`\b<ident>\b`, plain text, no language parsing) in a repository file
+    (tracked, or untracked and not git-ignored, as for the other checks) that
+    is under no module path and is not a `*.md` file. Binary files (a NUL
+    byte) and files over 1 MiB are skipped. Markdown is left out because
+    `MODULES.md`-style indexes print setup lines that would wire every
+    module. The leading identifier counts because some modules are wired
+    only through configuration: the Godot autoload line
+    `InputModeManager="*res://addons/CursorKit/InputModeManager.cs"` in
+    `project.godot` wires the entry `InputModeManager.Instance`.
+
+  arc never runs project code to check wiring; runtime liveness is the
+  caller's business.
+- **Public surface.** Messages name a module's public surface as its `entry`
+  list joined with `, `, or `import <import>` when `entry` is empty.
 
 ## Commands
 
@@ -238,8 +314,11 @@ For each path: the owning concept, or exit 1 with "unowned" and the three
 closest concepts (by shared path prefix, then alias match on path segments).
 Ignored paths report `ignored`. Besides the registry's `ignore` list, arc
 always ignores the files it manages or installs: `.arch/**`,
-`ARCHITECTURE.md`, the root `AGENTS.md` and `CLAUDE.md`, and the harness
-adapter directories `.claude/**`, `.codex/**` and `.opencode/**`.
+`ARCHITECTURE.md`, the root `AGENTS.md` and `CLAUDE.md`, the harness
+adapter directories `.claude/**`, `.codex/**` and `.opencode/**`, and
+`.gitmodules`. A path under a module (checked first) reports status
+`module` with the module id, as `<path>: module <id> (installed; use, never
+edit)`, exit 0 (`brief.Place` returns `StatusModule`).
 
 ### `arc brief [<path>... | --bead <id> | --concept <id>]`
 
@@ -256,7 +335,8 @@ Prints the agent-facing context for the given scope, sized to stay small
   concept grouped by file, methods cut first, then `+N more`; `--json` has
   every symbol with kind, doc, file and line;
 - boundaries whose `from` matches the paths;
-- active flags and pending removals touching those concepts.
+- active flags and pending removals touching those concepts;
+- a Modules section (below) with the modules relevant to the scope.
 
 With no arguments, prints the whole registry in compact form (the
 "always-loaded" view, target under 4,000 tokens; warns if exceeded). It
@@ -264,10 +344,29 @@ omits provides and ends with a line pointing to `arc brief <path>` and
 `arc find` for them.
 `--bead` resolves concepts from the bead's text via aliases and paths.
 
+The Modules section lists each module as `<id> — <summary>`, then an
+indented `entry:` line (its public surface, see "Modules") and a `rules:`
+line when it has rules. Which modules it lists:
+
+- the bare `arc brief`: every module;
+- a scoped brief (paths, `--concept`, `--bead`): each module that owns one
+  of the paths, and each module whose `covers` or `entry` matches (see
+  "Word matching") the owning concepts' summaries or, for `--bead`, the
+  bead's text.
+
+The section is capped at 800 tokens (the brief's estimate, text length / 4):
+modules are added in registry order until the next would pass the cap, and
+the rest are cut with a final line `(N more: arc brief --modules)`. `arc
+brief --modules` prints every module with no cap and nothing else; it takes
+no other scope (exit 2). `--json` has a `modules` list of the entries shown
+and `modules_more` with the count cut. With no modules in the registry the
+section and its fields are absent.
+
 ### `arc find <words>...`
 
-Ranks concepts and exported symbols (the provides of `arc brief`) against
-the words, so an agent checks for existing code before planning new code.
+Ranks installed modules, concepts and exported symbols (the provides of
+`arc brief`) against the words, so an agent checks for existing code before
+planning new code.
 Deterministic: words are lowercased, split at camelCase and `snake_case`,
 stopwords dropped and crudely stemmed (`s`/`es`/`ies`, `ing`, `ed`, a final
 `e`), so `parsing labels` meets `parseLabel`. Each query word scores once,
@@ -281,12 +380,21 @@ match (shorter token at least 4 letters) half:
 | symbol | file path segments | 2 |
 | concept | id, name, aliases | 6 |
 | concept | summary, reason, rules | 2 |
+| module | id, entry | 6 |
+| module | covers | 4 |
+| module | summary, rules | 2 |
 
-Prints up to 3 concepts by score (then registry order) with why they
-matched (`label (alias)`), then up to 10 symbols by score, then shorter
-name, file and line, as `file:line Name - doc (concept)`; symbols under a
-third of the best score are dropped. Exit 0 with results, 1 when nothing
-matches, 2 with no words.
+Module `entry` values are split at `.` as well as camelCase. Prints up to 3
+modules by score (then registry order) first, since a module hit means the
+work is already installed, as `- <id> [module]: <summary> [why]; use this;
+do not reimplement`; then up to 3 concepts by score (then registry order)
+with why they matched (`label (alias)`), then up to 10 symbols by score,
+then shorter name, file and line, as `file:line Name - doc (concept)`;
+symbols under a third of the best score are dropped. Files under module
+paths have no concept, so their symbols are never listed. `--json` adds
+`modules`, each with `id`, `summary`, `entry`, `score`, `why`, `"kind":
+"module"` and `"note": "use this; do not reimplement"`. Exit 0 with results
+(a module hit alone counts), 1 when nothing matches, 2 with no words.
 
 ### `arc gate [--base <ref> | --staged | --all] [--only <check>...]`
 
@@ -305,10 +413,40 @@ them and points to `place`/`brief`); giving two mode flags is also exit 2.
 | `flags` | a flag is past `expires` |
 | `removals` | a removal is past `remove_by`; or its paths no longer exist but the entry remains (delete the entry) |
 | `size` | a changed file exceeds `file_lines`, or a changed Go function exceeds `function_lines` |
+| `modules` | a file under an installed module changed, a submodule module has local changes, `go.mod` replaces a module's `import`, or a module is not wired (below) |
 | `checks.*` | an external command reports a finding not in its baseline (compared as a multiset: a finding fails when its normalized form occurs more times than in the baseline); for the duplicate-code ids `dupl` and `jscpd` the message is `duplicates existing code: <line>; extend or reuse the existing code instead of copying` |
 | `reasons` | the change adds a non-draft concept (or turns a draft into one) without a `reason`; skipped when the comparison point has no registry (adoption); with `--all`, every non-draft concept needs one |
 | `approval` | `--base` only: the registry change is structural (below) and the pull request lacks the `arch-approved` label |
 | `drafts` | warning only: draft concepts exist |
+
+`modules` runs in every mode and reports, with fixed messages (the finding's
+`path` holds the file, submodule directory or `go.mod`, and `entry` the
+module id):
+
+- `module <id>: file changed under module path`: a file added, modified or
+  deleted in the change set under the paths of a module that exists in the
+  comparison point's registry (the base for `--base`, `HEAD` for `--staged`
+  and working mode). A change set that adds the module entry is installing
+  it, so its files are not findings, and neither is a moved submodule
+  pointer (the gitlink itself). This catches vendored copies. `--all` has
+  no change set and skips this sub-check, so installed files are never
+  findings there;
+- `module <id>: submodule has local changes`: a gitlink under a module's
+  paths whose submodule work tree is dirty (`git -C <dir> status
+  --porcelain` prints anything). The superproject tracks only the gitlink,
+  so this is how edits to a submodule kit are caught. A submodule that is
+  not checked out (no `.git` in `<dir>`) is skipped;
+- `module <id>: go.mod replaces <import>`: a tracked `go.mod` outside module
+  paths has a `replace` directive (single or in a block) whose left side is
+  the module's `import` or a path prefix of it at a `/`;
+- `module <id>: not wired (no reference to <entries> outside module paths)`:
+  the module is not wired (see "Modules"); `<entries>` is the `entry` list
+  joined with `, `, or `import <import>` when it is empty. When `go list`
+  fails and no `entry` matched, the finding is the warning `module <id>:
+  wiring not checked (go list failed)` instead.
+
+The fix for the first two is to revert the edit and use the module's public
+surface; for the last, reference it from the program's real entry point.
 
 `approval` compares the registry at the merge base with the head and fails
 each structural change with `needs human approval: <change>. A maintainer
@@ -321,7 +459,11 @@ later; a concept whose `paths` now own a file they did not; an `ignore`
 list that now exempts a file it did not (built-in ignores count on both
 sides); a `limits` value (`file_lines`, `function_lines`) raised, or
 removed or set to 0 where the base had one (adding or lowering a limit is
-not listed). Coverage is judged on the files in the head tree. The check runs only with `--base` and
+not listed); a module entry removed (`module <id> removed`), or a module
+whose `paths` no longer cover a file they covered (`module <id> paths
+narrowed, no longer covering <file>`). Adding a module, or widening its
+paths, is not listed: it adds a guardrail. Coverage is judged on the files
+in the head tree, gitlinks included. The check runs only with `--base` and
 only when the base has a registry (adoption is not judged); pre-commit,
 `--staged`, working and `--all` modes skip it, so local agents can still
 propose such changes. With `ARC_APPROVED=1` it is skipped with an info line,
@@ -336,8 +478,9 @@ carries `labels`; this is read from the runner source and docs, not tested
 on a live instance.
 
 Pre-existing violations in untouched files do not fail `placement`, `size`
-or `boundaries`; only the change set is judged. `arc gate --all` judges the
-whole tree (used by `audit`).
+or `boundaries`; only the change set is judged. `placement`, `structure` and
+`size` skip files under module paths, including a staged gitlink. `arc gate
+--all` judges the whole tree (used by `audit`).
 
 The checks with id `dupl` and `jscpd` are clone detectors. Their output is
 canonicalized to one sorted line per clone, `<path>:<start>-<end>: duplicate
@@ -350,8 +493,9 @@ with either side in a test file (Go `_test.go`, Python `test_*.py` and
 `*_test.py`, JS/TS `.test.*` and `.spec.*`, or under a `test`, `tests`,
 `testdata` or `__tests__` directory) or in a file the registry ignores is
 dropped, in the gate, `arc baseline` and `audit` alike: table-driven tests
-repeat by design. dupl reports a group of N copies as N pairs, so the pairs
-between non-test copies of a group still fail.
+repeat by design. So is a clone with both sides under module paths
+(third-party code). dupl reports a group of N copies as N pairs, so the
+pairs between non-test copies of a group still fail.
 
 Every failure message names the registry entry involved and the fix, e.g.
 `internal/foo/x.go: unowned. Closest: goal (internal/workgraph), shared.
@@ -374,20 +518,75 @@ feature work and `arc find <what you need>` before adding a new file,
 package or concept. When the registry sets `beads: true`, the snippet
 gains a line telling agents to give new beads the `triage` template fields,
 with `Concepts touched` listing registry concept ids separated by commas.
+When the registry has modules, `ARCHITECTURE.md` gains a `### Modules`
+table after the concepts (`| Module | Summary | Paths | Entry | Rules |`,
+where Entry is the public surface), and the snippet gains these three
+lines after its fixed rules, before the beads line:
+
+```
+- Use an installed module (listed by `arc brief`) before writing your own version of what it covers.
+- Never edit files inside an installed module; configure or wrap it through its public surface.
+- Wire every installed module into the program's real entry point.
+```
+
+The text is fixed and generic. With no modules the output is byte-identical
+to a registry without the `modules` key.
 Output depends only on tracked files (the registry and the managed files),
 never on untracked state such as a `.beads/` directory, so `gate` staleness
 checks agree with `render` in a fresh clone (CI).
+
+### `arc module set|rm|list`
+
+Writes and lists module entries, so a tool that installs third-party code
+registers it without editing registry text itself.
+
+- `arc module set <id> --summary S [--path G]... [--covers C]... [--entry
+  E]... [--import P] [--rule R]... [--source S]` creates the entry, or
+  replaces an entry with that id in place (same position; fields not given
+  are cleared). A new entry is appended to `modules`, and the `modules` key
+  is created at the end of the file when absent. `--summary` is required
+  (exit 2 without it).
+- `arc module rm <id>` removes the entry. An id not in the registry is a
+  notice, exit 0, and nothing is written.
+- `arc module list` prints one line per module (`<id> — <summary>`), exit 0
+  even when there are none; `--json` prints `{"modules":[...]}` with the
+  entries as in the registry (lowercase field names, empty fields omitted).
+  Its presence is how other tools detect module support.
+
+`set` and `rm` edit the YAML through `yaml.Node`, touching only the
+`modules` entry concerned, so comments and the order of everything else
+survive; arc never marshals the whole registry back to disk. After the edit
+they validate the whole registry, as `arc validate` does. If validation
+fails, the previous file is restored byte for byte, the problems are
+printed, and the exit code is 1. On success they render, as `arc render`
+does. No registry is exit 2 (run `arc init`).
 
 ### `arc hook <claude|codex|opencode> [<event>]`
 
 Reads the harness's hook payload on stdin, answers in the harness's format.
 
-- **Before a file write/edit:** if the target is unowned and new, deny with
-  the `place` message. Otherwise allow and attach `brief <path>` as added
-  context, once per concept per session (session id from the payload; state
-  in `.arch/cache/`). Creating a new file in an owned concept that was
-  already briefed this session attaches that concept's provides again
-  (a new file is where duplication starts).
+- **Finding the registry:** the repository is `git rev-parse
+  --show-toplevel` of the target (or cwd). When that has no
+  `.arch/registry.yaml`, arc asks `git rev-parse
+  --show-superproject-working-tree` (empty output, exit 0, outside a
+  submodule) and uses the superproject when it has a registry. So a write
+  inside a submodule kit finds the project's registry, and a repository with
+  its own registry that is itself a submodule keeps its own.
+- **Before a file write/edit:** if the target is under a module's paths, new
+  or existing, ignored or not, deny with `<path> is inside installed module
+  <id>; do not edit it.`, then the module's `rules` joined with spaces, then
+  `Use its public surface: <entry list>.` (see "Public surface"). This is
+  the only deny besides placement. Otherwise, if the target is unowned and
+  new, deny with the `place` message. Otherwise allow and attach `brief
+  <path>` as added context, once per concept per session (session id from
+  the payload; state in `.arch/cache/`). Creating a new file in an owned
+  concept that was already briefed this session attaches that concept's
+  provides again (a new file is where duplication starts). The first
+  allowed write of a session, when the registry has modules, also carries
+  the line `Installed modules (use, never edit): A, B — arc brief for
+  details` (module ids in registry order), once per session; without a
+  session id it comes with every allowed write. arc has no session-start
+  hook (nor does opencode), so this is the session-start channel.
 - **After any shell command:** find the files it changed, with one
   `git --no-optional-locks status --porcelain=v1 -z --untracked-files=all
   --no-renames` call compared with the session's snapshot of dirty paths
@@ -410,7 +609,17 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
     before a write;
   - owned files get the same added context as a write: the brief of each
     concept not briefed this session, and a concept's provides again for a
-    new file in an already briefed concept.
+    new file in an already briefed concept;
+  - a changed file under a module path (a vendored copy) gets feedback, on
+    the same channel as unowned files: the pre-write deny reason followed by
+    `Revert the change.`;
+  - a module gitlink that the status lists runs `git -C <dir> status
+    --porcelain`; when that prints anything and differs from what the
+    session last recorded for the submodule, the feedback is `module <id>:
+    submodule has local changes; revert them in <dir> and use its public
+    surface: <entry list>.` A moved pointer with a clean work tree is not
+    reported. Files inside a submodule never appear in the superproject's
+    status, so this is how shell edits to a submodule kit are seen.
 
   Each new file is announced once per session, whether by a write hook or a
   shell hook. Claude Code runs `PostToolUse` only for tools
@@ -448,10 +657,13 @@ For each bead (`--new`: open beads without an `arch:*` label):
    in that text, is strong evidence, and up to 3 such symbols give
    `arch:review` with the reason `existing code may already cover this:
    <file:line Name>, ...`.
-4. Labels: `arch:ok` if fields are present, at least one concept resolved and
-   no non-goal matched; otherwise `arch:review` with a note giving the
-   reasons. Beads that name a concept not in the registry get `arch:review`,
-   with a reason saying to list registry concept ids separated by commas.
+   Likewise, unless `Closest existing thing` names the module id, a module
+   whose `covers` matches the title and description (see "Word matching")
+   gives `arch:review` with the reason `module <id> covers this`.
+4. Labels: `arch:ok` if fields are present, at least one concept resolved,
+   no non-goal matched and no module covers the bead (step 3); otherwise
+   `arch:review` with a note giving the reasons. Beads that name a concept
+   not in the registry get `arch:review`, with a reason saying to list registry concept ids separated by commas.
    Applying one of `arch:ok` and `arch:review` removes the other if present
    (a bead fixed after review ends up with only `arch:ok`); triage touches no
    other labels.
@@ -467,7 +679,8 @@ Deterministic drift report:
 - non-test LOC per concept, now vs `--since` (from git history);
 - lines added vs deleted; `fix:` vs `feat:` commit ratio;
 - hotspot files (most fix commits);
-- unowned files; draft concepts; non-draft concepts without a `reason`;
+- unowned files (module paths excluded); draft concepts; non-draft concepts
+  without a `reason`;
   concepts owning several tables;
 - expired flags, overdue removals, removals whose bead is closed but paths
   remain;
@@ -481,7 +694,8 @@ filed again.
 
 ### `arc validate`
 
-Registry validation only.
+Registry validation only, including the `modules` rules under "Registry
+schema".
 
 ## Beads integration details
 
@@ -497,8 +711,9 @@ Registry validation only.
 ## Code layout (arc's own)
 
 ```
-cmd/arc/            main, flag parsing
-internal/registry/  schema, load, validate, glob ownership, render
+cmd/arc/            main, flag parsing, commands (incl. arc module)
+internal/registry/  schema, load, validate, glob ownership, render,
+                    yaml.Node edits for arc module
 internal/gitx/      diff, staged set, history stats
 internal/gate/      one file per check
 internal/imports/   import extraction: go, python, ts/js
@@ -506,7 +721,7 @@ internal/brief/     brief and place
 internal/symbols/   exported symbol extraction (go, python, ts/js) and find
 internal/initcmd/   arc init: scaffold, --scan, hooks, adapters
 internal/hook/      harness payload adapters (claude, codex, opencode)
-internal/beads/     bd CLI wrapper
+internal/beads/     bd CLI wrapper and triage
 internal/audit/     report, prompt template
 adapters/claude/    plugin: hook config + short skill
 adapters/opencode/  JS plugin shim
