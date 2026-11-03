@@ -206,9 +206,15 @@ source`); `--json` omits empty fields.
     (`go list -f '{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...`, then
     `go list -deps <mains>`, with network and toolchain downloads off as for
     `boundaries`) lists `import` or a package under `import/`;
-  - an `entry`, or its leading identifier, occurs as a whole word
-    (`\b<ident>\b`, plain text, no language parsing) in a repository file
-    (tracked, or untracked and not git-ignored) that is not ignored. Here
+  - an `entry`, or its leading identifier (the whole entry when the text
+    before its first `.` is empty, as in `.X`), occurs as a whole word in a
+    repository file. Plain text, no language parsing: `\b` is put only on a
+    side whose edge character is a word character (`[A-Za-z0-9_]`); a side
+    that starts or ends with another character (`$Kit`, `@scope/pkg`) is
+    bounded by a non-word character or the start or end of the text instead
+    (`(?:^|[^\w])` before, `(?:[^\w]|$)` after). The files searched
+    are repository files (tracked, or untracked and not git-ignored) that
+    are not ignored. Here
     "ignored" means all of: git-ignored; arc's built-in ignores
     (`.arch/**`, `ARCHITECTURE.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/**`,
     `.codex/**`, `.opencode/**`, `.gitmodules`); the registry's `ignore`
@@ -218,7 +224,11 @@ source`); `--json` omits empty fields.
     module. The leading identifier counts because some modules are wired
     only through configuration: the Godot autoload line
     `InputModeManager="*res://addons/CursorKit/InputModeManager.cs"` in
-    `project.godot` wires the entry `InputModeManager.Instance`.
+    `project.godot` wires the entry `InputModeManager.Instance`. An entry
+    equal to the module's folder name (`CursorKit` for
+    `addons/CursorKit/**`) is wired by any mention of that path, such as a
+    `res://addons/CursorKit/...` line, so installers should name a type or
+    function instead.
 
   arc never runs project code to check wiring; runtime liveness is the
   caller's business.
@@ -428,30 +438,41 @@ them and points to `place`/`brief`); giving two mode flags is also exit 2.
 `path` holds the file, submodule directory or `go.mod`, and `entry` the
 module id):
 
-- `module <id>: file changed under module path`: a file added, modified or
+- `module <id>: file changed under module path`: a file modified or
   deleted in the change set under the paths of a module that exists in the
   comparison point's registry (the base for `--base`, `HEAD` for `--staged`
   and working mode). A change set that adds the module entry is installing
   it, so its files are not findings, and neither is a moved submodule
-  pointer (the gitlink itself). This catches vendored copies. `--all` has
+  pointer (the gitlink itself): committing inside a submodule only moves
+  the pointer, and the hook already denies writes there. Added files are
+  not findings either, because tools generate files next to installed
+  ones (Godot writes `*.uid` and `*.import` files beside a kit's scripts
+  and assets when it imports them); the hook still denies agent edits and
+  new files under module paths. This catches edited vendored copies. `--all` has
   no change set and skips this sub-check, so installed files are never
   findings there. With `ARC_APPROVED=1` (set by CI from the `arch-approved`
   label exactly as for `approval`) this sub-check is skipped with the same
   info line `approval` prints, so a deliberate vendored upgrade can land;
   the other three sub-checks still run;
 - `module <id>: submodule has local changes`: a gitlink under a module's
-  paths whose submodule work tree is dirty (`git -C <dir> status
-  --porcelain` prints anything). The superproject tracks only the gitlink,
-  so this is how edits to a submodule kit are caught. A submodule that is
+  paths whose submodule work tree has modified tracked files (`git -C <dir>
+  status --porcelain --untracked-files=no` prints anything). Untracked
+  files are left out for the same reason as added files above: generated
+  `*.uid` and `*.import` files are not edits. The superproject tracks only
+  the gitlink, so this is how edits to a submodule kit are caught. A submodule that is
   not checked out (no `.git` in `<dir>`) is skipped;
 - `module <id>: go.mod replaces <import>`: a tracked `go.mod` outside module
-  paths has a `replace` directive (single or in a block) whose left side is
-  the module's `import` or a path prefix of it at a `/`;
+  paths has a `replace` directive (single or in a block, spaced or not, as
+  in `replace(` or `a=>b`) whose left side is the module's `import` or a
+  path prefix of it at a `/`; one finding per `go.mod` and module;
 - `module <id>: not wired (no reference to <entries> outside module paths)`:
   the module is not wired (see "Modules"); `<entries>` is the `entry` list
   joined with `, `, or `import <import>` when it is empty. When `go list`
   fails and no `entry` matched, the finding is the warning `module <id>:
-  wiring not checked (go list failed)` instead.
+  wiring not checked (go list failed)` instead. With `--staged`, a module
+  absent from the `HEAD` registry is being installed by this commit and is
+  not judged for wiring, so an install commit passes pre-commit; `--base`,
+  working mode and `--all` judge every module.
 
 The fix for the first two is to revert the edit and use the module's public
 surface; for the last, reference it from the program's real entry point.

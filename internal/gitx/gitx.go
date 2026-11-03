@@ -194,3 +194,11 @@ func Gitlinks(root string) ([]string, error) {
 	}
 	return sortedUnique(links, nil), nil
 }
+
+// SubmoduleModified returns 'git status --porcelain --untracked-files=no'
+// of the work tree in dir: its modified tracked files, empty when there
+// are none.
+func SubmoduleModified(dir string) (string, error) {
+	out, err := run(dir, nil, "--no-optional-locks", "status", "--porcelain", "--untracked-files=no")
+	return string(out), err
+}

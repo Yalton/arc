@@ -4,9 +4,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/Yalton/arc/internal/gitx"
 	"github.com/Yalton/arc/internal/registry"
 )
 
@@ -112,6 +114,7 @@ func TestModulesChangedFileUnderExistingModule(t *testing.T) {
 	r.commitAll("sub")
 	r.git("checkout", "-q", "-b", "feat")
 	r.write("addons/Vend/x.cs", "class Vend { int edited; }\n")
+	r.write("addons/Vend/x.cs.uid", "uid://generated\n") // added: generated, not a finding
 	r.git("add", "-A")
 	got := moduleLines(r.gate("staged", "modules"), changed)
 	want := "[modules] addons/Vend/x.cs: module Vend: " + changed
@@ -144,12 +147,26 @@ func TestModulesInstallingAModuleIsNotAFinding(t *testing.T) {
 	}
 	r := newRepo(t, withoutVend)
 	r.write("Player.cs", "class Player {}\n")
+	r.write("addons/Vend/x.cs", "class Vend {}\n") // files present before the entry
 	r.commitAll("init")
+	r.git("checkout", "-q", "-b", "feat")
 	r.write(registry.Path, modulesRegistry)
-	r.write("addons/Vend/x.cs", "class Vend {}\n")
+	r.write("addons/Vend/x.cs", "class Vend { int upgraded; }\n")
 	r.git("add", "-A")
-	if got := moduleLines(r.gate("staged", "modules"), changed); len(got) != 0 {
+	rep := r.gate("staged", "modules")
+	if got := moduleLines(rep, changed); len(got) != 0 {
 		t.Fatalf("installing a module: got %q", got)
+	}
+	// --staged does not judge wiring of the module being installed; Kit,
+	// already in HEAD's registry, is still judged.
+	if got := moduleLines(rep, "not wired"); len(got) != 1 || !strings.Contains(got[0], "module Kit:") {
+		t.Fatalf("staged wiring: got %q", got)
+	}
+	r.commitAll("install")
+	for _, mode := range []string{"main", "all"} {
+		if got := moduleLines(r.gate(mode, "modules"), "module Vend: not wired"); len(got) != 1 {
+			t.Fatalf("%s: want Vend judged for wiring, got %q", mode, got)
+		}
 	}
 }
 
@@ -161,9 +178,30 @@ func TestModulesAllSkipsChangedFiles(t *testing.T) {
 	}
 }
 
+func TestModulesAllGuardSkipsChangedFiles(t *testing.T) {
+	reg, err := registry.Parse([]byte(modulesRegistry))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := &Context{Reg: reg, BaseReg: reg, All: true, Changes: &gitx.ChangeSet{Files: []gitx.FileChange{
+		{Path: "addons/Vend/x.cs", Status: gitx.Modified},
+	}}}
+	if got := changedModuleFiles(ctx, nil); len(got) != 0 {
+		t.Fatalf("--all with a base registry: got %v", got)
+	}
+	ctx.All = false
+	if got := changedModuleFiles(ctx, nil); len(got) != 1 {
+		t.Fatalf("control without --all: got %v", got)
+	}
+}
+
 func TestModulesDirtySubmodule(t *testing.T) {
 	r := submoduleRepo(t)
 	r.commitAll("sub")
+	r.write("addons/Kit/a.cs.uid", "uid://generated\n")
+	if got := moduleLines(r.gate("working", "modules"), "submodule"); len(got) != 0 {
+		t.Fatalf("an untracked generated file is not a local change: %q", got)
+	}
 	r.write("addons/Kit/a.cs", "class Kit { int edited; }\n")
 	rep := r.gate("working", "modules")
 	got := moduleLines(rep, "submodule has local changes")
@@ -208,7 +246,7 @@ modules:
 
 func TestModulesGoModReplace(t *testing.T) {
 	r := newRepo(t, goModuleRegistry)
-	r.write("go.mod", "module example.com/app\n\nreplace example.com/m => ../m\n")
+	r.write("go.mod", "module example.com/app\n\nreplace example.com/m => ../m\nreplace example.com=>../x\n")
 	r.commitAll("init")
 	got := moduleLines(r.gate("all", "modules"), "replaces")
 	want := "[modules] go.mod: module M: go.mod replaces example.com/m"
@@ -222,14 +260,15 @@ func TestReplaceSources(t *testing.T) {
 
 require example.com/x v1.0.0 // replace a => b
 replace example.com/one v1.2.3 => ../one
-replace (
+replace example.com/four=>../four
+replace(
 	// example.com/commented => ../c
 	"example.com/two" => ../two
-	example.com/three v0.1.0 => example.com/fork v0.1.1
-)
+	example.com/three v0.1.0 => example.com/fork v0.1.1)
+replace (example.com/five => ../five)
 `
 	got := strings.Join(replaceSources([]byte(gomod)), " ")
-	if want := "example.com/one example.com/two example.com/three"; got != want {
+	if want := "example.com/one example.com/four example.com/two example.com/three example.com/five"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
@@ -316,5 +355,36 @@ func TestModulesWiringGoListFailureIsAWarning(t *testing.T) {
 	want := "[modules] warning: module M: wiring not checked (go list failed)"
 	if got := findings(rep); got != want || rep.Errors != 0 || rep.Warnings != 1 {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestEntryWordMatching(t *testing.T) {
+	cases := []struct {
+		entry, text string
+		match       bool
+	}{
+		{"InputModeManager.Instance", "InputModeManager.Instance.Push(this);", true},
+		{"InputModeManager.Instance", `InputModeManager="*res://addons/Kit/InputModeManager.cs"`, true},
+		{"InputModeManager.Instance", "MyInputModeManager x;", false},
+		{"Kit()", "var k = Kit();", true},
+		{"Kit()", "Kit()", true},
+		{"Kit()", "MyKit();", false},
+		{"@scope/pkg", `import x from "@scope/pkg";`, true},
+		{"@scope/pkg", "@scope/pkg", true},
+		{"@scope/pkg", "@scope/pkgs", false},
+		{"@scope/pkg", "a@scope/pkg", false},
+		{".X", "use .X here", true},
+		{".X", ".X", true},
+		{".X", "foo.X", false},
+		{".X", ".Xy", false},
+		{"$Kit", "$Kit.init()", true},
+		{"$Kit", "x$Kit", false},
+		{"$Kit", "$Kits", false},
+	}
+	for _, c := range cases {
+		re := regexp.MustCompile(wordPattern(leadingIdent(c.entry)))
+		if got := re.MatchString(c.text); got != c.match {
+			t.Errorf("entry %q in %q: match %v, want %v", c.entry, c.text, got, c.match)
+		}
 	}
 }
