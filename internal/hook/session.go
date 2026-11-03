@@ -28,6 +28,15 @@ type sessionState struct {
 	// signature (see shellChanges). nil until the first shell command of
 	// the session.
 	Snapshot map[string]string `json:"snapshot"`
+	// Modules is the registry's modules as of the last shell command,
+	// stored with Snapshot: the next command's module feedback is judged
+	// by them, so a module registered by that command gets none.
+	Modules []registry.Module `json:"modules,omitempty"`
+	// Submodules maps a module submodule path to the 'git status
+	// --porcelain' output last reported for it.
+	Submodules map[string]string `json:"submodules,omitempty"`
+	// ModulesShown is set once the "Installed modules" line was given.
+	ModulesShown bool `json:"modules_shown,omitempty"`
 
 	path  string // "" without a session id: nothing persists
 	dirty bool
@@ -84,6 +93,38 @@ func (st *sessionState) markNew(p string) bool {
 	return true
 }
 
+// modulesLine returns the once-per-session "Installed modules" line, or ""
+// when the registry has no modules or it was given already. Without a
+// session id it comes every time.
+func (st *sessionState) modulesLine(reg *registry.Registry) string {
+	if len(reg.Modules) == 0 || st.ModulesShown {
+		return ""
+	}
+	if st.path != "" {
+		st.ModulesShown, st.dirty = true, true
+	}
+	ids := make([]string, len(reg.Modules))
+	for i, m := range reg.Modules {
+		ids[i] = m.ID
+	}
+	return "Installed modules (use, never edit): " + strings.Join(ids, ", ") + " \u2014 arc brief for details"
+}
+
+// snapshotRegistry is the registry whose modules judge a shell command:
+// the one stored with the session's snapshot, else the one in HEAD, else
+// an empty one.
+func (st *sessionState) snapshotRegistry(root string) *registry.Registry {
+	if st.Snapshot != nil {
+		return &registry.Registry{Modules: st.Modules}
+	}
+	if data, ok, err := gitx.FileAt(root, "HEAD", registry.Path); err == nil && ok {
+		if r, err := registry.Parse(data); err == nil {
+			return r
+		}
+	}
+	return &registry.Registry{}
+}
+
 func (st *sessionState) save() error {
 	if st.path == "" || !st.dirty {
 		return nil
@@ -132,11 +173,36 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 	st := loadSession(root, session)
 	first := st.Snapshot == nil
 	cutoff := time.Now().Add(-firstShellWindow) // file times are wall clock; now dates the brief
+	before := st.snapshotRegistry(root)
 	snap := make(map[string]string, len(entries))
-	var concepts, created, unowned []string
+	subs := map[string]string{}
+	var concepts, created, unowned, moduleFeedback []string
 	for _, e := range entries {
-		fi, err := os.Lstat(filepath.Join(root, filepath.FromSlash(e.Path)))
-		if err != nil || !fi.Mode().IsRegular() {
+		abs := filepath.Join(root, filepath.FromSlash(e.Path))
+		fi, err := os.Lstat(abs)
+		if err != nil {
+			continue
+		}
+		if m, ok := before.ModuleOf(e.Path); ok && fi.IsDir() {
+			// A submodule's gitlink: its files never appear in this status.
+			if _, err := os.Stat(filepath.Join(abs, ".git")); err != nil {
+				continue // not checked out
+			}
+			out, err := gitx.SubmoduleStatus(abs)
+			if err != nil || out == "" {
+				continue
+			}
+			subs[e.Path] = out
+			if st.Submodules[e.Path] != out {
+				surface := ""
+				if s := m.Surface(); s != "" {
+					surface = " and use its public surface: " + s
+				}
+				moduleFeedback = append(moduleFeedback, "module "+m.ID+": submodule has local changes; revert them in "+e.Path+surface+".")
+			}
+			continue
+		}
+		if !fi.Mode().IsRegular() {
 			continue
 		}
 		sig := fmt.Sprintf("%s %d %d", e.Code, fi.ModTime().UnixNano(), fi.Size())
@@ -145,6 +211,10 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 			continue
 		}
 		isNew := e.Code == "??" || e.Code[0] == 'A'
+		if m, ok := before.ModuleOf(e.Path); ok {
+			moduleFeedback = append(moduleFeedback, m.EditDenial(e.Path)+" Revert the change.")
+			continue
+		}
 		res := brief.Place(reg, e.Path)
 		switch res.Status {
 		case brief.StatusUnowned:
@@ -159,7 +229,7 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 		}
 	}
 	if st.path != "" {
-		st.Snapshot, st.dirty = snap, true
+		st.Snapshot, st.Modules, st.Submodules, st.dirty = snap, reg.Modules, subs, true
 	}
 	fresh := st.markConcepts(concepts)
 	var again []string
@@ -172,15 +242,20 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 	if d.Context, err = briefContext(root, reg, fresh, again, "the code your last command changed", now); err != nil {
 		return Decision{}, err
 	}
+	var parts []string
+	if len(moduleFeedback) > 0 {
+		parts = append(parts, strings.Join(moduleFeedback, "\n"))
+	}
 	if len(unowned) > 0 {
 		lines := unowned
 		if len(lines) > maxUnownedListed {
 			lines = append(lines[:maxUnownedListed:maxUnownedListed],
 				fmt.Sprintf("... and %d more ('arc gate' lists them all)", len(unowned)-maxUnownedListed))
 		}
-		d.Feedback = "arc: your last command created file(s) that no registry concept owns, so 'arc gate' will fail on them. " +
-			"Move each into an existing concept's paths, or register an owner in " + registry.Path + " with a reason:\n- " +
-			strings.Join(lines, "\n- ")
+		parts = append(parts, "arc: your last command created file(s) that no registry concept owns, so 'arc gate' will fail on them. "+
+			"Move each into an existing concept's paths, or register an owner in "+registry.Path+" with a reason:\n- "+
+			strings.Join(lines, "\n- "))
 	}
+	d.Feedback = strings.Join(parts, "\n\n")
 	return d, st.save()
 }

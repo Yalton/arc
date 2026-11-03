@@ -108,6 +108,9 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 		_, statErr := os.Stat(p)
 		isNew := errors.Is(statErr, os.ErrNotExist)
 		switch res.Status {
+		case brief.StatusModule:
+			m, _ := reg.ModuleOf(rel)
+			return Decision{Deny: true, Reason: m.EditDenial(rel)}, nil
 		case brief.StatusUnowned:
 			if isNew {
 				return Decision{Deny: true, Reason: "arc: " + brief.PlaceMessage(res) +
@@ -137,6 +140,9 @@ func preWrite(ev Event, now time.Time) (Decision, error) {
 	text, err := briefContext(root, reg, fresh, again, "the code you are editing", now)
 	if err != nil {
 		return Decision{}, err
+	}
+	if line := st.modulesLine(reg); line != "" {
+		text = strings.TrimSpace(line + "\n\n" + text)
 	}
 	if err := st.save(); err != nil {
 		return Decision{Context: text}, err
@@ -359,12 +365,14 @@ func triageBeads(root string, reg *registry.Registry, ids []string, now time.Tim
 	return d, nil
 }
 
-// findRoot returns the git top-level containing dir, walking up to the
-// nearest existing directory first (the target directory may be new).
+// findRoot returns the repository root arc applies to for dir, walking up
+// to the nearest existing directory first (the target directory may be
+// new). It is the git top-level, unless that has no registry and dir is in
+// a submodule whose superproject has one (SPEC.md, "arc hook").
 func findRoot(dir string) (string, error) {
 	for {
 		if fi, err := os.Stat(dir); err == nil && fi.IsDir() {
-			return gitx.Root(dir)
+			break
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -372,6 +380,19 @@ func findRoot(dir string) (string, error) {
 		}
 		dir = parent
 	}
+	top, err := gitx.Root(dir)
+	if err != nil || hasRegistry(top) {
+		return top, err
+	}
+	if sup, err := gitx.Superproject(dir); err == nil && sup != "" && hasRegistry(sup) {
+		return sup, nil
+	}
+	return top, nil
+}
+
+func hasRegistry(root string) bool {
+	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(registry.Path)))
+	return err == nil
 }
 
 func contains(xs []string, x string) bool {

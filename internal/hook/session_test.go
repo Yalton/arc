@@ -177,3 +177,57 @@ func TestShellWithBdCreateCombines(t *testing.T) {
 		t.Fatalf("got %+v", d)
 	}
 }
+
+func TestShellModuleFeedback(t *testing.T) {
+	root := moduleRepo(t)
+	// Submodule edited from a shell: gitlink shows dirty.
+	write(t, root, "addons/Kit/a.cs", "class A { int x; }\n")
+	d := Decide(shell(root, "s1"), now)
+	if !strings.Contains(d.Feedback, "module Kit: submodule has local changes; revert them in addons/Kit and use its public surface: Kit.Run.") {
+		t.Fatalf("submodule: %+v", d)
+	}
+	// Reported once while unchanged.
+	if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+		t.Fatalf("repeat: %+v", d)
+	}
+	// Vendored file.
+	write(t, root, "vendor/lib/x.go", "package lib\n\nvar X = 1\n")
+	d = Decide(shell(root, "s1"), now)
+	if !strings.Contains(d.Feedback, "vendor/lib/x.go is inside installed module lib; do not edit it.") ||
+		!strings.HasSuffix(d.Feedback, "Revert the change.") {
+		t.Fatalf("vendored: %+v", d)
+	}
+	// A plain new file in the catch-all concept is fine.
+	write(t, root, "Player.cs", "class P {}\n")
+	if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+		t.Fatalf("plain: %+v", d)
+	}
+}
+
+func TestShellModuleRegisteredByCommandGetsNoFeedback(t *testing.T) {
+	root := moduleRepo(t)
+	// Snapshot with no module "fresh" yet.
+	Decide(shell(root, "s1"), now)
+	// The command writes files and registers the module together.
+	write(t, root, "third/fresh/f.go", "package fresh\n")
+	write(t, root, ".arch/registry.yaml", moduleRegistry+`  - id: fresh
+    paths: ["third/fresh/**"]
+`)
+	if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+		t.Fatalf("registered by the command: %+v", d)
+	}
+	// Edited afterwards, it is a module.
+	write(t, root, "third/fresh/f.go", "package fresh\n\nvar Z = 1\n")
+	if d := Decide(shell(root, "s1"), now); !strings.Contains(d.Feedback, "installed module fresh") {
+		t.Fatalf("later edit: %+v", d)
+	}
+}
+
+func TestShellModuleFirstCommandJudgedByHead(t *testing.T) {
+	root := moduleRepo(t)
+	// No snapshot: HEAD's registry knows the modules.
+	write(t, root, "vendor/lib/x.go", "package lib\n\nvar X = 1\n")
+	if d := Decide(shell(root, "s1"), now); !strings.Contains(d.Feedback, "installed module lib") {
+		t.Fatalf("HEAD registry: %+v", d)
+	}
+}

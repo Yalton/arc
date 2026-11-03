@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -97,6 +98,31 @@ type Module struct {
 	Import  string   `yaml:"import" json:"import,omitempty"`
 	Rules   []string `yaml:"rules" json:"rules,omitempty"`
 	Source  string   `yaml:"source" json:"source,omitempty"`
+}
+
+// Surface names the module's public surface for messages: its entry list
+// joined with ", ", or "import <import>" when entry is empty, or "" with
+// neither.
+func (m Module) Surface() string {
+	if len(m.Entry) > 0 {
+		return strings.Join(m.Entry, ", ")
+	}
+	if m.Import != "" {
+		return "import " + m.Import
+	}
+	return ""
+}
+
+// EditDenial is the sentence that refuses an edit of rel, a path under m
+// (SPEC.md, "arc hook"): where the path is, the module's rules, and its
+// public surface.
+func (m Module) EditDenial(rel string) string {
+	parts := []string{rel + " is inside installed module " + m.ID + "; do not edit it."}
+	parts = append(parts, m.Rules...)
+	if s := m.Surface(); s != "" {
+		parts = append(parts, "Use its public surface: "+s+".")
+	}
+	return strings.Join(parts, " ")
 }
 
 type Limits struct {

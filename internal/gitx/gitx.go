@@ -136,12 +136,13 @@ type DirtyPath struct {
 
 // WorktreeStatus lists every path that differs from HEAD in the index or
 // the working tree, untracked files included one by one and ignored files
-// left out, with renames reported as an add plus a delete. It is one
+// left out, with renames reported as an add plus a delete. A submodule is
+// listed as its gitlink path when its pointer moved or its work tree is dirty. It is one
 // 'git status --porcelain -z' call and takes no optional locks, so it is
 // safe to run while an agent's own git commands are in flight.
 func WorktreeStatus(root string) ([]DirtyPath, error) {
 	out, err := run(root, nil, "--no-optional-locks", "status", "--porcelain=v1", "-z",
-		"--untracked-files=all", "--no-renames", "--ignore-submodules=all")
+		"--untracked-files=all", "--no-renames")
 	if err != nil {
 		return nil, err
 	}
@@ -153,4 +154,26 @@ func WorktreeStatus(root string) ([]DirtyPath, error) {
 		paths = append(paths, DirtyPath{Path: rec[3:], Code: rec[:2]})
 	}
 	return paths, nil
+}
+
+// Superproject returns the work tree of the repository that contains dir as
+// a submodule, or "" when dir is not inside a submodule (git prints nothing
+// and exits 0 then).
+func Superproject(dir string) (string, error) {
+	out, err := run(dir, nil, "rev-parse", "--show-superproject-working-tree")
+	if err != nil {
+		return "", err
+	}
+	sup := strings.TrimRight(string(out), "\r\n")
+	if sup == "" {
+		return "", nil
+	}
+	return filepath.Clean(filepath.FromSlash(sup)), nil
+}
+
+// SubmoduleStatus returns 'git status --porcelain' of the work tree in dir,
+// empty when it is clean.
+func SubmoduleStatus(dir string) (string, error) {
+	out, err := run(dir, nil, "--no-optional-locks", "status", "--porcelain")
+	return string(out), err
 }

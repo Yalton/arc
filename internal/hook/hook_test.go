@@ -257,3 +257,122 @@ func TestPostShellNeverBlocks(t *testing.T) {
 		t.Fatalf("got %+v", d)
 	}
 }
+
+const moduleRegistry = `version: 1
+system: {name: demo, summary: Demo.}
+concepts:
+  - id: app
+    name: App
+    summary: The program.
+    paths: ["**"]
+modules:
+  - id: Kit
+    summary: A kit.
+    paths: ["addons/Kit/**"]
+    entry: [Kit.Run]
+    rules: [Configure it through its autoload.]
+  - id: lib
+    summary: Vendored lib.
+    paths: ["vendor/lib/**"]
+    import: example.com/lib
+`
+
+// moduleRepo builds a repo with a catch-all concept, module Kit as a real
+// submodule at addons/Kit and a vendored module lib.
+func moduleRepo(t *testing.T) string {
+	t.Helper()
+	bare := filepath.Join(t.TempDir(), "kit.git")
+	seed := t.TempDir()
+	git(t, seed, "init", "-q")
+	write(t, seed, "a.cs", "class A {}\n")
+	git(t, seed, "add", "-A")
+	git(t, seed, "commit", "-q", "-m", "kit")
+	git(t, filepath.Dir(bare), "clone", "-q", "--bare", seed, bare)
+
+	root := t.TempDir()
+	git(t, root, "init", "-q")
+	write(t, root, ".arch/registry.yaml", moduleRegistry)
+	write(t, root, "vendor/lib/x.go", "package lib\n")
+	write(t, root, "main.go", "package main\n")
+	git(t, root, "add", "-A")
+	git(t, root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", bare, "addons/Kit")
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-q", "-m", "init")
+	r, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func TestModulePreWriteDenied(t *testing.T) {
+	root := moduleRepo(t)
+	d := Decide(pre(root, "s1", "addons/Kit/a.cs"), now)
+	want := "addons/Kit/a.cs is inside installed module Kit; do not edit it. Configure it through its autoload. Use its public surface: Kit.Run."
+	if !d.Deny || d.Reason != want {
+		t.Fatalf("got %+v", d)
+	}
+	d = Decide(pre(root, "s1", "vendor/lib/x.go"), now)
+	if !d.Deny || !strings.HasPrefix(d.Reason, "vendor/lib/x.go is inside installed module lib; do not edit it.") ||
+		!strings.Contains(d.Reason, "Use its public surface: import example.com/lib.") {
+		t.Fatalf("got %+v", d)
+	}
+	// New file in a not yet existing directory under a module.
+	if d := Decide(pre(root, "s1", "vendor/lib/new/dir/y.go"), now); !d.Deny {
+		t.Fatalf("new dir: %+v", d)
+	}
+}
+
+func TestModuleInstalledLineOncePerSession(t *testing.T) {
+	root := moduleRepo(t)
+	const line = "Installed modules (use, never edit): Kit, lib"
+	d := Decide(pre(root, "s1", "Player.cs"), now)
+	if d.Deny || !strings.Contains(d.Context, line) {
+		t.Fatalf("first: %+v", d)
+	}
+	if d := Decide(pre(root, "s1", "Other.cs"), now); d.Deny || strings.Contains(d.Context, line) {
+		t.Fatalf("second: %+v", d)
+	}
+	if d := Decide(pre(root, "s2", "Player.cs"), now); !strings.Contains(d.Context, line) {
+		t.Fatalf("new session: %+v", d)
+	}
+}
+
+func TestModuleWriteFromInsideSubmodule(t *testing.T) {
+	root := moduleRepo(t)
+	kit := filepath.Join(root, "addons/Kit")
+	d := Decide(Event{Kind: PreWrite, SessionID: "s1", Cwd: kit, Paths: []string{"a.cs"}}, now)
+	if !d.Deny || !strings.HasPrefix(d.Reason, "addons/Kit/a.cs is inside installed module Kit") {
+		t.Fatalf("got %+v", d)
+	}
+	d = Decide(Event{Kind: PreWrite, SessionID: "s1", Cwd: kit, Paths: []string{"newdir/b.cs"}}, now)
+	if !d.Deny || !strings.HasPrefix(d.Reason, "addons/Kit/newdir/b.cs is inside") {
+		t.Fatalf("new dir: %+v", d)
+	}
+}
+
+func TestModuleOwnRegistrySubmoduleKeepsOwn(t *testing.T) {
+	// A submodule with its own registry, inside a superproject with none.
+	bare := filepath.Join(t.TempDir(), "inner.git")
+	seed := t.TempDir()
+	git(t, seed, "init", "-q")
+	write(t, seed, ".arch/registry.yaml", moduleRegistry)
+	write(t, seed, "vendor/lib/x.go", "package lib\n")
+	git(t, seed, "add", "-A")
+	git(t, seed, "commit", "-q", "-m", "inner")
+	git(t, filepath.Dir(bare), "clone", "-q", "--bare", seed, bare)
+	super := t.TempDir()
+	git(t, super, "init", "-q")
+	git(t, super, "-c", "protocol.file.allow=always", "submodule", "add", "-q", bare, "inner")
+	inner := filepath.Join(super, "inner")
+	if d := Decide(Event{Kind: PreWrite, SessionID: "s", Cwd: inner, Paths: []string{"vendor/lib/x.go"}}, now); !d.Deny ||
+		!strings.HasPrefix(d.Reason, "vendor/lib/x.go is inside installed module lib") {
+		t.Fatalf("got %+v", d)
+	}
+	// And a superproject with a registry does not override an inner one.
+	write(t, super, ".arch/registry.yaml", testRegistry)
+	if d := Decide(Event{Kind: PreWrite, SessionID: "s", Cwd: inner, Paths: []string{"vendor/lib/x.go"}}, now); !d.Deny ||
+		!strings.Contains(d.Reason, "installed module lib") {
+		t.Fatalf("inner registry must win: %+v", d)
+	}
+}
