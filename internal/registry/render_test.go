@@ -68,8 +68,8 @@ func TestRenderPreservesOutsideText(t *testing.T) {
 		!strings.HasSuffix(got, EndMarker+"\n\nAnd me.\n") || strings.Contains(got, "OLD-CONTENT") {
 		t.Fatalf("outside text not preserved:\n%s", got)
 	}
-	if n := strings.Count(Snippet(true), "\n"); n >= 15 {
-		t.Fatalf("snippet has %d lines, want < 15", n)
+	if n := strings.Count(Snippet(true, true), "\n"); n >= 20 {
+		t.Fatalf("snippet has %d lines, want < 20", n)
 	}
 }
 
@@ -128,5 +128,43 @@ func TestReplaceBlockMalformed(t *testing.T) {
 		if _, err := ReplaceBlock(doc, "x\n"); err == nil {
 			t.Errorf("no error for %q", doc)
 		}
+	}
+}
+
+func withModules(t *testing.T) *Registry {
+	t.Helper()
+	r := loadFixture(t, "valid.yaml")
+	r.Modules = []Module{
+		{ID: "CursorKit", Summary: "Custom mouse\ncursors.", Paths: []string{"addons/CursorKit/**", "addons/a|b/**"},
+			Entry: []string{"CursorKit.set_cursor", "CursorKitAutoload"}, Rules: []string{"Use set_cursor.", "Never | subclass."}},
+		{ID: "retry", Summary: "Retry with backoff.", Import: "example.com/retry"},
+		{ID: "bare"},
+	}
+	return r
+}
+
+func TestRenderModulesGolden(t *testing.T) {
+	r := withModules(t)
+	golden(t, "architecture-modules.md", r.RenderArchitecture())
+	r.Beads = true
+	golden(t, "AGENTS-modules-beads.md", Snippet(r.Beads, true))
+	for _, line := range []string{
+		"- Use an installed module (listed by `arc brief`) before writing your own version of what it covers.\n",
+		"- Never edit files inside an installed module; configure or wrap it through its public surface.\n",
+		"- Wire every installed module into the program's real entry point.\n",
+	} {
+		if !strings.Contains(Snippet(false, true), line) {
+			t.Errorf("snippet lacks %q", line)
+		}
+	}
+	if strings.Contains(Snippet(true, false), "installed module") {
+		t.Error("module lines without modules")
+	}
+}
+
+func TestRenderNoModulesUnchanged(t *testing.T) {
+	r := loadFixture(t, "valid.yaml")
+	if strings.Contains(r.RenderArchitecture(), "Modules") || Snippet(false, false) != snippet {
+		t.Fatal("module output without modules")
 	}
 }
