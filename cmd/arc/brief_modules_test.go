@@ -25,11 +25,11 @@ func TestBriefModules(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, _ := runArc("brief")
-	if code != exitOK || !strings.Contains(out, "Modules:\nCursorKit — Custom mouse cursors.\n  entry: CursorKit.set_cursor\n  rules: Use set_cursor.\nretry — Retry with backoff.\n  entry: import example.com/retry") {
+	if code != exitOK || !strings.Contains(out, "Modules (installed; use, never edit):\nCursorKit — Custom mouse cursors.\n  entry: CursorKit.set_cursor\n  rules: Use set_cursor.\nretry — Retry with backoff.\n  entry: import example.com/retry") {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	code, out, _ = runArc("brief", "--modules")
-	if code != exitOK || strings.Contains(out, "System:") || !strings.HasPrefix(out, "Modules:\nCursorKit") || !strings.Contains(out, "retry") {
+	if code != exitOK || strings.Contains(out, "System:") || !strings.HasPrefix(out, "Modules (installed; use, never edit):\nCursorKit") || !strings.Contains(out, "retry") {
 		t.Fatalf("code %d out %q", code, out)
 	}
 	code, out, _ = runArc("brief", "--modules", "--json")

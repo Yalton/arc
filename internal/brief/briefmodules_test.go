@@ -28,7 +28,7 @@ func TestWholeModules(t *testing.T) {
 	if b.ModulesMore != 0 || len(b.Modules) != 3 {
 		t.Fatalf("modules %d more %d", len(b.Modules), b.ModulesMore)
 	}
-	if strings.Contains(Whole(loadFixture(t), now).Text(), "Modules:") {
+	if strings.Contains(Whole(loadFixture(t), now).Text(), "Modules (installed") {
 		t.Fatal("Modules section without modules")
 	}
 	js, _ := json.Marshal(Whole(loadFixture(t), now))
@@ -94,7 +94,7 @@ func TestScopedModules(t *testing.T) {
 	// Nothing relevant: no section.
 	reg.Concepts[0].Summary = "The only goal."
 	b = ForPaths(reg, []string{"internal/workgraph/goal.go"}, now)
-	if len(b.Modules) != 0 || strings.Contains(b.Text(), "Modules:") {
+	if len(b.Modules) != 0 || strings.Contains(b.Text(), "Modules (installed") {
 		t.Fatalf("unexpected modules: %s", moduleIDs(b))
 	}
 }

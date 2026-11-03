@@ -108,7 +108,7 @@ func capModules(mods []registry.Module, cap int) ([]registry.Module, int) {
 	return mods, 0
 }
 
-const modulesHeader = "Modules:\n"
+const modulesHeader = "Modules (installed; use, never edit):\n"
 
 // moduleText renders one module: id and summary, then entry and rules.
 func moduleText(m registry.Module) string {

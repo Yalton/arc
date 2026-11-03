@@ -357,7 +357,8 @@ omits provides and ends with a line pointing to `arc brief <path>` and
 `arc find` for them.
 `--bead` resolves concepts from the bead's text via aliases and paths.
 
-The Modules section lists each module as `<id> — <summary>`, then an
+The Modules section starts with the header line `Modules (installed; use,
+never edit):` and lists each module as `<id> — <summary>`, then an
 indented `entry:` line (its public surface, see "Modules") and a `rules:`
 line when it has rules. Which modules it lists:
 

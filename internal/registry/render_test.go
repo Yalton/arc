@@ -162,9 +162,11 @@ func TestRenderModulesGolden(t *testing.T) {
 	}
 }
 
-func TestRenderNoModulesUnchanged(t *testing.T) {
+// A registry without modules renders exactly the pre-modules golden.
+func TestRenderNoModulesMatchesGolden(t *testing.T) {
 	r := loadFixture(t, "valid.yaml")
-	if strings.Contains(r.RenderArchitecture(), "Modules") || Snippet(false, false) != snippet {
-		t.Fatal("module output without modules")
+	golden(t, "architecture-block.md", r.RenderArchitecture())
+	if Snippet(false, false) != snippet {
+		t.Fatal("module lines in the snippet without modules")
 	}
 }
