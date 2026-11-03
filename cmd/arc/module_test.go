@@ -46,7 +46,9 @@ func moduleRepo(t *testing.T, registryYAML string, files ...string) string {
 			content = registryYAML
 		}
 		p := filepath.Join(root, rel)
-		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +70,9 @@ func golden(t *testing.T, name, got string) {
 	t.Helper()
 	p := filepath.Join(goldenDir, name)
 	if os.Getenv("ARC_UPDATE_GOLDEN") == "1" {
-		os.WriteFile(p, []byte(got), 0o644)
+		if err := os.WriteFile(p, []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	want, err := os.ReadFile(p)
 	if err != nil {
@@ -121,7 +125,9 @@ func TestModuleSetReplacesInPlace(t *testing.T) {
 
 func TestModuleRm(t *testing.T) {
 	root := moduleRepo(t, moduleRegistry, "src/a.go", "addons/Kit/k.gd")
-	runArc("module", "set", "Kit", "--summary", "A kit.", "--path", "addons/Kit/**", "--entry", "Kit")
+	if code, out, errs := runArc("module", "set", "Kit", "--summary", "A kit.", "--path", "addons/Kit/**", "--entry", "Kit"); code != exitOK {
+		t.Fatalf("set: %d %q %q", code, out, errs)
+	}
 	code, out, _ := runArc("module", "rm", "Kit", "--json")
 	if code != exitOK || !strings.Contains(out, `"removed": "Kit"`) || !strings.Contains(out, `"existed": true`) {
 		t.Fatalf("rm: %d %q", code, out)
@@ -218,5 +224,138 @@ func TestModuleListEmpty(t *testing.T) {
 	code, out, _ := runArc("module", "list", "--json")
 	if code != exitOK || strings.TrimSpace(out) != "{\n  \"modules\": []\n}" {
 		t.Fatalf("%d %q", code, out)
+	}
+}
+
+// nonModulesLines returns the registry's lines outside the top-level
+// modules block (its key line and the indented or blank-free lines under it).
+func nonModulesLines(text string) []string {
+	var keep []string
+	in := false
+	for _, l := range strings.Split(text, "\n") {
+		switch {
+		case strings.HasPrefix(l, "modules:"):
+			in = true
+		case in && (strings.HasPrefix(l, " ") || strings.HasPrefix(l, "\t")):
+		default:
+			in = false
+			keep = append(keep, l)
+		}
+	}
+	return keep
+}
+
+const fourSpaceRegistry = `# Registry, four-space style.
+
+version: 1
+
+
+system:
+    name: demo   # odd spacing
+    summary: Demo.
+
+# the concepts
+concepts:
+    - id: game
+      name: Game
+      summary: The game.
+      paths: ["src/**"]
+
+modules:
+    # first kit
+    - id: A
+      summary: A.
+      entry: [A]
+    # between entries
+    - id: B
+      summary: B.
+      entry: [B]
+# about limits
+limits:
+    file_lines: 1000
+
+# end of file
+`
+
+func TestModuleEditsLeaveOtherBytesAlone(t *testing.T) {
+	root := moduleRepo(t, fourSpaceRegistry, "src/a.go")
+	before := nonModulesLines(readFile(t, root, ".arch/registry.yaml"))
+	for _, args := range [][]string{
+		{"module", "set", "A", "--summary", "A2.", "--entry", "A"},
+		{"module", "set", "C", "--summary", "C.", "--entry", "C"},
+		{"module", "rm", "B"},
+		{"module", "rm", "A"},
+		{"module", "rm", "C"},
+	} {
+		if code, out, errs := runArc(args...); code != exitOK {
+			t.Fatalf("%v: %d %q %q", args, code, out, errs)
+		}
+		got := readFile(t, root, ".arch/registry.yaml")
+		if strings.Join(nonModulesLines(got), "\n") != strings.Join(before, "\n") {
+			t.Fatalf("%v changed bytes outside modules:\n%s", args, got)
+		}
+	}
+}
+
+func TestModuleSetKeepsCommentBetweenEntries(t *testing.T) {
+	root := moduleRepo(t, fourSpaceRegistry, "src/a.go")
+	if code, out, errs := runArc("module", "set", "A", "--summary", "A2.", "--entry", "A"); code != exitOK {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	got := readFile(t, root, ".arch/registry.yaml")
+	if !strings.Contains(got, "# between entries") || !strings.Contains(got, "# about limits\nlimits:") || !strings.Contains(got, "A2.") {
+		t.Fatalf("registry:\n%s", got)
+	}
+}
+
+func TestModuleSetAddsNewlineAtEOF(t *testing.T) {
+	root := moduleRepo(t, "version: 1\nsystem: {name: demo}\nconcepts:\n  - {id: g, paths: [\"**\"]}", "a.go")
+	if code, out, errs := runArc("module", "set", "K", "--summary", "K.", "--entry", "K"); code != exitOK {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	got := readFile(t, root, ".arch/registry.yaml")
+	if !strings.Contains(got, "[\"**\"]}\nmodules:\n") {
+		t.Fatalf("registry:\n%s", got)
+	}
+}
+
+func TestModuleRmRestoresFileOnInvalid(t *testing.T) {
+	// The module hides the overlap of a and b; removing it exposes it.
+	reg := `version: 1
+system: {name: demo}
+concepts:
+  - {id: a, paths: ["lib/**"]}
+  - {id: b, paths: ["lib/kit/**"]}
+modules:
+  - id: Kit
+    summary: Kit.
+    paths: ["lib/kit/**"]
+    entry: [Kit]
+`
+	root := moduleRepo(t, reg, "lib/a.go", "lib/kit/k.go")
+	code, out, _ := runArc("module", "rm", "Kit", "--json")
+	if code != exitViolations || !strings.Contains(out, `"problems"`) {
+		t.Fatalf("code %d out %q", code, out)
+	}
+	if got := readFile(t, root, ".arch/registry.yaml"); got != reg {
+		t.Fatalf("registry not restored:\n%s", got)
+	}
+}
+
+func TestModuleSetKeepsFileMode(t *testing.T) {
+	root := moduleRepo(t, moduleRegistry, "src/a.go")
+	p := filepath.Join(root, ".arch", "registry.yaml")
+	if err := os.Chmod(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := runArc("module", "set", "K", "--summary", "K.", "--entry", "K"); code != exitOK {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	fi, err := os.Stat(p)
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v err %v", fi.Mode(), err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(root, ".arch", ".registry-*")); len(left) > 0 {
+		t.Fatalf("temp files left: %v", left)
 	}
 }

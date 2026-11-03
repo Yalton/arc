@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -150,19 +151,30 @@ func editRegistry(out *output, name string,
 		out.result(text, v)
 		return exitOK
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeAtomic(path, data); err != nil {
 		return out.fail(exitUsage, name+": "+err.Error())
 	}
-	restore := func() { _ = os.WriteFile(path, old, 0o644) }
+	// restore puts the previous bytes back; it returns a message for the
+	// caller to print when that fails too.
+	restore := func(why string) int {
+		if err := writeAtomic(path, old); err != nil {
+			return out.fail(exitUsage, fmt.Sprintf("%s: %s, and restoring %s failed: %v; check the file", name, why, registry.Path, err))
+		}
+		return -1
+	}
 
 	nr, err := openRepo()
 	if err != nil {
-		restore()
-		return out.fail(exitUsage, name+": "+err.Error())
+		if code := restore(err.Error()); code >= 0 {
+			return code
+		}
+		return out.fail(exitUsage, name+": "+err.Error()+"; registry left unchanged")
 	}
 	if problems := nr.reg.Validate(nr.files); len(problems) > 0 {
-		restore()
 		registry.SortProblems(problems)
+		if code := restore("registry invalid"); code >= 0 {
+			return code
+		}
 		var b strings.Builder
 		for _, p := range problems {
 			fmt.Fprintf(&b, "%s: %s\n", registry.Path, p)
@@ -173,9 +185,38 @@ func editRegistry(out *output, name string,
 	}
 	rendered, err := nr.reg.Render(nr.root)
 	if err != nil {
-		return out.fail(exitUsage, name+": render: "+err.Error())
+		msg := name + ": registry was changed, but render failed: " + err.Error() + " (run 'arc render')"
+		fmt.Fprintln(out.stderr, "arc: "+msg)
+		if out.json {
+			out.result("", map[string]string{"error": msg})
+		}
+		return exitUsage
 	}
 	text, v := done(rendered)
 	out.result(text, v)
 	return exitOK
+}
+
+// writeAtomic replaces path with data through a temp file in the same
+// directory and a rename, keeping the file's mode.
+func writeAtomic(path string, data []byte) error {
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(path); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".registry-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, werr := f.Write(data)
+	cerr := f.Close()
+	err = errors.Join(werr, cerr, os.Chmod(tmp, mode))
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return err
 }
