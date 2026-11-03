@@ -38,8 +38,8 @@ type Suggestion struct {
 }
 
 // Place reports the owner of path (repo-relative, slash-separated). A module
-// path is reported first, then ignore, which wins over ownership. For unowned paths, up to MaxSuggestions concepts are
-// ranked by the number of leading path segments shared with any of the
+// path is reported first, then ignore, which wins over ownership. For
+// unowned paths, up to MaxSuggestions concepts are ranked by the number of leading path segments shared with any of the
 // concept's glob literal prefixes, then by how many path segment tokens
 // equal an alias, then registry order. Concepts scoring zero on both are
 // left out, so fewer than three (or none) may be returned.
