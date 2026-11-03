@@ -208,10 +208,13 @@ source`); `--json` omits empty fields.
     `boundaries`) lists `import` or a package under `import/`;
   - an `entry`, or its leading identifier, occurs as a whole word
     (`\b<ident>\b`, plain text, no language parsing) in a repository file
-    (tracked, or untracked and not git-ignored, as for the other checks) that
-    is under no module path and is not a `*.md` file. Binary files (a NUL
-    byte) and files over 1 MiB are skipped. Markdown is left out because
-    `MODULES.md`-style indexes print setup lines that would wire every
+    (tracked, or untracked and not git-ignored) that is not ignored. Here
+    "ignored" means all of: git-ignored; arc's built-in ignores
+    (`.arch/**`, `ARCHITECTURE.md`, `AGENTS.md`, `CLAUDE.md`, `.claude/**`,
+    `.codex/**`, `.opencode/**`, `.gitmodules`); the registry's `ignore`
+    globs; module paths; `*.md` files; binary files (a NUL byte); and files
+    over 1 MiB. Test files not covered by `ignore` count. Markdown is left
+    out because documentation files print setup lines that would wire every
     module. The leading identifier counts because some modules are wired
     only through configuration: the Godot autoload line
     `InputModeManager="*res://addons/CursorKit/InputModeManager.cs"` in
@@ -354,9 +357,11 @@ line when it has rules. Which modules it lists:
   "Word matching") the owning concepts' summaries or, for `--bead`, the
   bead's text.
 
-The section is capped at 800 tokens (the brief's estimate, text length / 4):
-modules are added in registry order until the next would pass the cap, and
-the rest are cut with a final line `(N more: arc brief --modules)`. `arc
+The section is capped at 800 tokens (the brief's estimate, text length / 4),
+counting its header line: modules are added in registry order until the
+next would pass the cap, and the rest are cut with a final line `(N more:
+arc brief --modules)`. The first module is always shown, even when it alone
+passes the cap. Entries are joined with `, ` and rules with `; `. `arc
 brief --modules` prints every module with no cap and nothing else; it takes
 no other scope (exit 2). `--json` has a `modules` list of the entries shown
 and `modules_more` with the count cut. With no modules in the registry the
@@ -430,7 +435,10 @@ module id):
   it, so its files are not findings, and neither is a moved submodule
   pointer (the gitlink itself). This catches vendored copies. `--all` has
   no change set and skips this sub-check, so installed files are never
-  findings there;
+  findings there. With `ARC_APPROVED=1` (set by CI from the `arch-approved`
+  label exactly as for `approval`) this sub-check is skipped with the same
+  info line `approval` prints, so a deliberate vendored upgrade can land;
+  the other three sub-checks still run;
 - `module <id>: submodule has local changes`: a gitlink under a module's
   paths whose submodule work tree is dirty (`git -C <dir> status
   --porcelain` prints anything). The superproject tracks only the gitlink,
@@ -462,7 +470,9 @@ removed or set to 0 where the base had one (adding or lowering a limit is
 not listed); a module entry removed (`module <id> removed`), or a module
 whose `paths` no longer cover a file they covered (`module <id> paths
 narrowed, no longer covering <file>`). Adding a module, or widening its
-paths, is not listed: it adds a guardrail. Coverage is judged on the files
+paths, is not listed: it adds a guardrail. (Rewording an existing rule
+counts as removing it, so a pull request that only rewords a rule still
+needs the label.) Coverage is judged on the files
 in the head tree, gitlinks included. The check runs only with `--base` and
 only when the base has a registry (adoption is not judged); pre-commit,
 `--staged`, working and `--all` modes skip it, so local agents can still
@@ -519,8 +529,12 @@ package or concept. When the registry sets `beads: true`, the snippet
 gains a line telling agents to give new beads the `triage` template fields,
 with `Concepts touched` listing registry concept ids separated by commas.
 When the registry has modules, `ARCHITECTURE.md` gains a `### Modules`
-table after the concepts (`| Module | Summary | Paths | Entry | Rules |`,
-where Entry is the public surface), and the snippet gains these three
+table after the concepts, in registry order, with columns `| Module |
+Summary | Paths | Entry | Rules |`: Module is the id, Summary one line,
+Paths the globs in backticks joined with `, `, Entry the public surface
+(see "Modules") with each entry in backticks joined with `, `, and Rules
+joined with `; ` (`|` escaped as in the other tables). The snippet gains
+these three
 lines after its fixed rules, before the beads line:
 
 ```
@@ -553,6 +567,10 @@ registers it without editing registry text itself.
   entries as in the registry (lowercase field names, empty fields omitted).
   Its presence is how other tools detect module support.
 
+With `--json`, `set` prints `{"module":{...}}` (the entry as written) and
+`rm` prints `{"removed":"<id>","existed":true|false}`; a validation failure
+prints `{"problems":[...]}` with exit 1.
+
 `set` and `rm` edit the YAML through `yaml.Node`, touching only the
 `modules` entry concerned, so comments and the order of everything else
 survive; arc never marshals the whole registry back to disk. After the edit
@@ -571,7 +589,11 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
   --show-superproject-working-tree` (empty output, exit 0, outside a
   submodule) and uses the superproject when it has a registry. So a write
   inside a submodule kit finds the project's registry, and a repository with
-  its own registry that is itself a submodule keeps its own.
+  its own registry that is itself a submodule keeps its own. A target in a
+  directory that does not exist yet resolves from its nearest existing
+  ancestor. The target is then matched against modules and concepts as a
+  path relative to the resolved root (for `addons/Kit/a.cs` written from
+  inside the submodule, the superproject-relative path).
 - **Before a file write/edit:** if the target is under a module's paths, new
   or existing, ignored or not, deny with `<path> is inside installed module
   <id>; do not edit it.`, then the module's `rules` joined with spaces, then
@@ -620,6 +642,13 @@ Reads the harness's hook payload on stdin, answers in the harness's format.
     surface: <entry list>.` A moved pointer with a clean work tree is not
     reported. Files inside a submodule never appear in the superproject's
     status, so this is how shell edits to a submodule kit are seen.
+
+  Module paths here are judged by the registry as it was in the session's
+  snapshot before the command (stored with the snapshot; with no snapshot,
+  the registry in `HEAD`, or none). A module whose entry first appears
+  after the command was registered by that command, for example an
+  installer that writes the files and runs `arc module set`; its files and
+  submodule get no module feedback.
 
   Each new file is announced once per session, whether by a write hook or a
   shell hook. Claude Code runs `PostToolUse` only for tools
