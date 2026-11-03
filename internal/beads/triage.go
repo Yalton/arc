@@ -109,7 +109,7 @@ func Analyze(reg *registry.Registry, provides map[string][]symbols.Symbol, b Bea
 	named := strings.Join(fieldValue(text, "Closest existing thing"), " ")
 	about := withoutFieldNames(b.Title + "\n" + b.Description)
 	for _, m := range reg.Modules {
-		if brief.MatchesModule(m, about) && !mentions(named, m.ID) {
+		if brief.MatchesCovers(m, about) && !mentions(named, m.ID) {
 			r.Reasons = append(r.Reasons, "module "+m.ID+" covers this")
 		}
 	}

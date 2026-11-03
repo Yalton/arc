@@ -17,6 +17,31 @@ const ModulesTokenCap = 800
 // it, and at least half, occur in text; an entry matches when its leading
 // identifier occurs in text as a whole word, case-insensitively.
 func MatchesModule(m registry.Module, text string) bool {
+	if MatchesCovers(m, text) {
+		return true
+	}
+	idents := map[string]bool{}
+	for _, w := range strings.FieldsFunc(text, func(r rune) bool {
+		return !(r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r > 127)
+	}) {
+		idents[strings.ToLower(w)] = true
+	}
+	for _, e := range m.Entry {
+		if i := strings.IndexByte(e, '.'); i >= 0 {
+			e = e[:i]
+		}
+		if e != "" && idents[strings.ToLower(e)] {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchesCovers reports whether one of m's covers phrases matches text:
+// at least two distinct tokens of it, and at least half, occur in text.
+// Triage uses this alone, since a bead that names an entry is wiring the
+// module, not rebuilding it.
+func MatchesCovers(m registry.Module, text string) bool {
 	have := map[string]bool{}
 	for _, t := range symbols.Tokens(text) {
 		have[t] = true
@@ -33,20 +58,6 @@ func MatchesModule(m registry.Module, text string) bool {
 			}
 		}
 		if hit >= 2 && hit*2 >= len(seen) {
-			return true
-		}
-	}
-	idents := map[string]bool{}
-	for _, w := range strings.FieldsFunc(text, func(r rune) bool {
-		return !(r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r > 127)
-	}) {
-		idents[strings.ToLower(w)] = true
-	}
-	for _, e := range m.Entry {
-		if i := strings.IndexByte(e, '.'); i >= 0 {
-			e = e[:i]
-		}
-		if e != "" && idents[strings.ToLower(e)] {
 			return true
 		}
 	}

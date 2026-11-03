@@ -241,6 +241,7 @@ const moduleRegistry = triageRegistry + `modules:
     summary: Mouse cursor helpers.
     paths: ["addons/Kit/**"]
     covers: [mouse cursor stack]
+    entry: [CursorKit.set_cursor]
 `
 
 func TestAnalyzeModuleCovers(t *testing.T) {
@@ -256,5 +257,10 @@ func TestAnalyzeModuleCovers(t *testing.T) {
 	b.Description = strings.Replace(goodDesc, "internal/goal/export.go", "kit", 1)
 	if r := Analyze(reg, nil, b, now); r.Label != LabelOK {
 		t.Fatalf("closest names the module: %+v", r)
+	}
+	// Naming an entry wires the module; only covers match (SPEC "triage").
+	b = Bead{ID: "t-2", Title: "Call CursorKit.set_cursor from the menu", Description: goodDesc}
+	if r := Analyze(reg, nil, b, now); r.Label != LabelOK {
+		t.Fatalf("entry is not covers: %+v", r)
 	}
 }
