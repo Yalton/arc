@@ -113,14 +113,20 @@ func editModules(data []byte, create bool, mutate func(seq *yaml.Node) bool) ([]
 		return nil, err
 	}
 
+	// The block is written with the file's own line ending.
+	eol, blockBytes := []byte("\n"), buf.Bytes()
+	if bytes.Contains(data, []byte("\r\n")) {
+		eol = []byte("\r\n")
+		blockBytes = bytes.ReplaceAll(blockBytes, []byte("\n"), eol)
+	}
 	var out bytes.Buffer
 	for _, l := range lines[:start] {
 		out.Write(l)
 	}
 	if start > 0 && !bytes.HasSuffix(lines[start-1], []byte("\n")) {
-		out.WriteByte('\n')
+		out.Write(eol)
 	}
-	out.Write(buf.Bytes())
+	out.Write(blockBytes)
 	for _, l := range lines[end:] {
 		out.Write(l)
 	}
@@ -129,7 +135,8 @@ func editModules(data []byte, create bool, mutate func(seq *yaml.Node) bool) ([]
 
 func isBlankOrComment(line []byte) bool {
 	t := bytes.TrimSpace(line)
-	return len(t) == 0 || (line[0] == '#')
+	return len(t) == 0 || t[0] == '#'
+
 }
 
 func moduleIndex(seq *yaml.Node, id string) int {
