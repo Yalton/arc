@@ -85,10 +85,20 @@ func editModules(data []byte, create bool, mutate func(seq *yaml.Node) bool) ([]
 			end = root.Content[idx+2].Line - 1
 		}
 		// The next key's leading blank and comment lines are not ours.
+		trimmed := false
 		for end > start+1 && isBlankOrComment(lines[end-1]) {
 			end--
+			trimmed = true
 		}
 		key.HeadComment, key.FootComment = "", ""
+		// Trailing comment lines stay in the file, so the encoder must not
+		// write them again as the last entry's (or the list's) foot.
+		if trimmed && seq.Kind == yaml.SequenceNode {
+			seq.FootComment = ""
+			if n := len(seq.Content); n > 0 {
+				clearFoot(seq.Content[n-1])
+			}
+		}
 	}
 	if seq == nil || seq.Kind != yaml.SequenceNode {
 		if !create {
@@ -131,6 +141,15 @@ func editModules(data []byte, create bool, mutate func(seq *yaml.Node) bool) ([]
 		out.Write(l)
 	}
 	return out.Bytes(), nil
+}
+
+// clearFoot drops foot comments in n and below; the parser may attach a
+// trailing comment to any of the last entry's nested nodes.
+func clearFoot(n *yaml.Node) {
+	n.FootComment = ""
+	for _, c := range n.Content {
+		clearFoot(c)
+	}
 }
 
 func isBlankOrComment(line []byte) bool {

@@ -20,11 +20,38 @@ func TestSetModuleKeepsCRLF(t *testing.T) {
 	}
 }
 
-func TestSetModuleKeepsLFWhenMixedMostlyLF(t *testing.T) {
+// Rule: the block uses CRLF if the file contains any CRLF, else LF.
+func TestSetModuleMixedEndingsUseCRLF(t *testing.T) {
+	src := "version: 1\nsystem: {name: demo}\r\nconcepts:\n  - {id: g, paths: [\"**\"]}\n"
+	out, err := SetModule([]byte(src), Module{ID: "K", Summary: "K.", Entry: []string{"K"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	if !strings.HasPrefix(got, src) || !strings.Contains(got, "modules:\r\n  - id: K\r\n") ||
+		strings.Contains(got[len(src):], "\n") && strings.Contains(strings.ReplaceAll(got[len(src):], "\r\n", ""), "\n") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSetModulePureLFStaysLF(t *testing.T) {
 	src := "version: 1\nsystem: {name: demo}\nconcepts:\n  - {id: g, paths: [\"**\"]}\n"
 	out, _ := SetModule([]byte(src), Module{ID: "K", Summary: "K.", Entry: []string{"K"}})
 	if strings.Contains(string(out), "\r") {
 		t.Fatalf("CR added: %q", out)
+	}
+}
+
+func TestSetModuleAppendKeepsFootCommentOnce(t *testing.T) {
+	data := []byte("version: 1\nsystem: {name: demo}\nconcepts:\n  - {id: g, paths: [\"**\"]}\nmodules:\n  - id: A\n    summary: A.\n    entry: [A]\n    # foot of A\n")
+	for _, id := range []string{"B", "C"} {
+		var err error
+		if data, err = SetModule(data, Module{ID: id, Summary: id + ".", Entry: []string{id}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := strings.Count(string(data), "# foot of A"); n != 1 {
+		t.Fatalf("foot comment appears %d times:\n%s", n, data)
 	}
 }
 
