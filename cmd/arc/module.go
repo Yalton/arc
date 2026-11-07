@@ -198,8 +198,12 @@ func editRegistry(out *output, name string,
 }
 
 // writeAtomic replaces path with data through a temp file in the same
-// directory and a rename, keeping the file's mode.
+// directory and a rename, keeping the file's mode. A symlink is followed.
 func writeAtomic(path string, data []byte) error {
+	// A symlinked file is updated through the link, which stays a link.
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		path = real
+	}
 	mode := os.FileMode(0o644)
 	if fi, err := os.Stat(path); err == nil {
 		mode = fi.Mode().Perm()

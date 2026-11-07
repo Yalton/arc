@@ -359,3 +359,24 @@ func TestModuleSetKeepsFileMode(t *testing.T) {
 		t.Fatalf("temp files left: %v", left)
 	}
 }
+
+func TestModuleSetWritesThroughSymlink(t *testing.T) {
+	root := moduleRepo(t, moduleRegistry, "src/a.go")
+	p := filepath.Join(root, ".arch", "registry.yaml")
+	real := filepath.Join(root, "real-registry.yaml")
+	if err := os.Rename(p, real); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "real-registry.yaml"), p); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := runArc("module", "set", "K", "--summary", "K.", "--entry", "K"); code != exitOK {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	if fi, err := os.Lstat(p); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("registry is no longer a symlink: %v %v", fi, err)
+	}
+	if !strings.Contains(readFile(t, root, "real-registry.yaml"), "id: K") {
+		t.Fatal("target file not updated")
+	}
+}
