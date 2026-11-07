@@ -408,3 +408,22 @@ func TestPlainSubmoduleNotJudgedBySuperproject(t *testing.T) {
 		t.Fatalf("module: %+v", d)
 	}
 }
+
+// A submodule whose .git is a directory (cloned in place, or its git dir
+// moved back) still belongs to the superproject's registry.
+func TestModuleWriteFromSubmoduleWithGitDir(t *testing.T) {
+	root := moduleRepo(t)
+	kit := filepath.Join(root, "addons/Kit")
+	gitdir := filepath.Join(root, ".git/modules/addons/Kit")
+	if err := os.Remove(filepath.Join(kit, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(gitdir, filepath.Join(kit, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	git(t, root, "config", "--file", filepath.Join(kit, ".git/config"), "--unset", "core.worktree")
+	d := Decide(Event{Kind: PreWrite, SessionID: "s1", Cwd: kit, Paths: []string{"a.cs"}}, now)
+	if !d.Deny || !strings.HasPrefix(d.Reason, "addons/Kit/a.cs is inside installed module Kit") {
+		t.Fatalf("got %+v", d)
+	}
+}

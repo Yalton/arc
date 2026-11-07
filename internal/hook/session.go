@@ -160,7 +160,7 @@ func moduleSubmodules(root string, reg *registry.Registry, st *sessionState) (ma
 	if len(reg.Modules) == 0 {
 		return subs, nil
 	}
-	links, err := gitlinks(root)
+	links, err := gitlinks(root, modulePrefixes(reg)...)
 	if err != nil {
 		return subs, nil
 	}
@@ -188,6 +188,29 @@ func moduleSubmodules(root string, reg *registry.Registry, st *sessionState) (ma
 		}
 	}
 	return subs, feedback
+}
+
+// modulePrefixes returns the literal leading directories of the module
+// path globs, to scope the index listing to them. If any glob starts with
+// a wildcard it returns nil: the whole index is listed.
+func modulePrefixes(reg *registry.Registry) []string {
+	var dirs []string
+	for _, m := range reg.Modules {
+		for _, p := range m.Paths {
+			var lit []string
+			for _, seg := range strings.Split(p, "/") {
+				if strings.ContainsAny(seg, `*?[]{}\`) {
+					break
+				}
+				lit = append(lit, seg)
+			}
+			if len(lit) == 0 || lit[0] == "" {
+				return nil
+			}
+			dirs = append(dirs, strings.Join(lit, "/"))
+		}
+	}
+	return dirs
 }
 
 // firstShellWindow bounds what the first shell command of a session is
@@ -226,6 +249,12 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 	var concepts, created, unowned []string
 	for _, e := range entries {
 		isNew := e.Code == "??" || e.Code[0] == 'A'
+		// 'git rm --cached' lists a path twice (staged deletion and
+		// untracked); the later entry gets its own snapshot key.
+		key := e.Path
+		if _, dup := snap[key]; dup {
+			key += "\x00" + e.Code
+		}
 		abs := filepath.Join(root, filepath.FromSlash(e.Path))
 		fi, err := os.Lstat(abs)
 		if err != nil {
@@ -233,8 +262,8 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 			// date, so the first command of a session never blames it.
 			if m, ok := before.ModuleOf(e.Path); ok && !isNew && strings.ContainsRune(e.Code, 'D') {
 				sig := e.Code + " deleted"
-				snap[e.Path] = sig
-				if !first && st.Snapshot[e.Path] != sig {
+				snap[key] = sig
+				if !first && st.Snapshot[key] != sig {
 					moduleFeedback = append(moduleFeedback, m.EditDenial(e.Path)+" Revert the change.")
 				}
 			}
@@ -244,8 +273,8 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 			continue
 		}
 		sig := fmt.Sprintf("%s %d %d", e.Code, fi.ModTime().UnixNano(), fi.Size())
-		snap[e.Path] = sig
-		if first && fi.ModTime().Before(cutoff) || !first && st.Snapshot[e.Path] == sig {
+		snap[key] = sig
+		if first && fi.ModTime().Before(cutoff) || !first && st.Snapshot[key] == sig {
 			continue
 		}
 		if m, ok := before.ModuleOf(e.Path); ok {

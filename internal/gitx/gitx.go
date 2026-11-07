@@ -173,9 +173,17 @@ func Superproject(dir string) (string, error) {
 }
 
 // Gitlinks returns the repo-relative paths of the submodule gitlinks in the
-// index (mode 160000), sorted.
-func Gitlinks(root string) ([]string, error) {
-	out, err := run(root, nil, "ls-files", "-s", "-z")
+// index (mode 160000), sorted. With dirs, only entries at or under those
+// repo-relative paths are listed (literal paths, not globs).
+func Gitlinks(root string, dirs ...string) ([]string, error) {
+	args := []string{"ls-files", "-s", "-z"}
+	if len(dirs) > 0 {
+		args = append(args, "--")
+		for _, d := range dirs {
+			args = append(args, ":(literal)"+d)
+		}
+	}
+	out, err := run(root, nil, args...)
 	if err != nil {
 		return nil, err
 	}

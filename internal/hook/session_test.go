@@ -268,7 +268,7 @@ func countSubmoduleGit(t *testing.T) *int {
 	t.Helper()
 	n := new(int)
 	gl, sm := gitlinks, submoduleModified
-	gitlinks = func(root string) ([]string, error) { *n++; return gl(root) }
+	gitlinks = func(root string, dirs ...string) ([]string, error) { *n++; return gl(root, dirs...) }
 	submoduleModified = func(dir string) (string, error) { *n++; return sm(dir) }
 	t.Cleanup(func() { gitlinks, submoduleModified = gl, sm })
 	return n
@@ -292,5 +292,35 @@ func TestShellModulesCheckEachModuleSubmodule(t *testing.T) {
 	d := Decide(shell(root, "s1"), now)
 	if !strings.Contains(d.Feedback, "module Kit: submodule has local changes") || *n != 2 {
 		t.Fatalf("got %+v after %d git commands, want ls-files and one status", d, *n)
+	}
+}
+
+func TestShellModulesListIndexOnlyUnderModulePaths(t *testing.T) {
+	root := moduleRepo(t)
+	var got [][]string
+	gl := gitlinks
+	gitlinks = func(r string, dirs ...string) ([]string, error) { got = append(got, dirs); return gl(r, dirs...) }
+	t.Cleanup(func() { gitlinks = gl })
+	write(t, root, "addons/Kit/a.cs", "class A { int x; }\n")
+	Decide(shell(root, "s1"), now)
+	if len(got) != 1 || strings.Join(got[0], ",") != "addons/Kit,vendor/lib" {
+		t.Fatalf("ls-files scoped to %q, want addons/Kit and vendor/lib", got)
+	}
+}
+
+// 'git rm --cached' on a module file reports it twice (staged deletion and
+// untracked); the feedback comes once, not on every later command.
+func TestShellModuleGitRmCachedFeedbackOnce(t *testing.T) {
+	root := moduleRepo(t)
+	Decide(shell(root, "s1"), now) // snapshot
+	git(t, root, "rm", "-q", "--cached", "vendor/lib/x.go")
+	d := Decide(shell(root, "s1"), now)
+	if !strings.Contains(d.Feedback, "vendor/lib/x.go is inside installed module lib") {
+		t.Fatalf("first: %+v", d)
+	}
+	for i := 0; i < 2; i++ {
+		if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+			t.Fatalf("repeat %d: %+v", i, d)
+		}
 	}
 }

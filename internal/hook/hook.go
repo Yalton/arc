@@ -387,11 +387,8 @@ func findRoot(target string) (string, error) {
 	if err != nil || hasRegistry(top) {
 		return top, err
 	}
-	// Only a submodule (or linked worktree) has a .git file; a plain
-	// repository's .git is a directory and has no superproject to ask.
-	if fi, err := os.Lstat(filepath.Join(top, ".git")); err != nil || fi.IsDir() {
-		return top, nil
-	}
+	// A submodule's .git may be a file or, when cloned in place, a
+	// directory, so the superproject is asked either way.
 	sup, err := gitx.Superproject(dir)
 	if err != nil || sup == "" {
 		return top, nil
