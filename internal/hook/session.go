@@ -249,6 +249,12 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 	var concepts, created, unowned []string
 	for _, e := range entries {
 		isNew := e.Code == "??" || e.Code[0] == 'A'
+		// 'git rm --cached' lists a path twice (staged deletion and
+		// untracked); the later entry gets its own snapshot key.
+		key := e.Path
+		if _, dup := snap[key]; dup {
+			key += "\x00" + e.Code
+		}
 		abs := filepath.Join(root, filepath.FromSlash(e.Path))
 		fi, err := os.Lstat(abs)
 		if err != nil {
@@ -256,8 +262,8 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 			// date, so the first command of a session never blames it.
 			if m, ok := before.ModuleOf(e.Path); ok && !isNew && strings.ContainsRune(e.Code, 'D') {
 				sig := e.Code + " deleted"
-				snap[e.Path] = sig
-				if !first && st.Snapshot[e.Path] != sig {
+				snap[key] = sig
+				if !first && st.Snapshot[key] != sig {
 					moduleFeedback = append(moduleFeedback, m.EditDenial(e.Path)+" Revert the change.")
 				}
 			}
@@ -267,8 +273,8 @@ func shellChanges(root string, reg *registry.Registry, session string, now time.
 			continue
 		}
 		sig := fmt.Sprintf("%s %d %d", e.Code, fi.ModTime().UnixNano(), fi.Size())
-		snap[e.Path] = sig
-		if first && fi.ModTime().Before(cutoff) || !first && st.Snapshot[e.Path] == sig {
+		snap[key] = sig
+		if first && fi.ModTime().Before(cutoff) || !first && st.Snapshot[key] == sig {
 			continue
 		}
 		if m, ok := before.ModuleOf(e.Path); ok {

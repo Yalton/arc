@@ -307,3 +307,20 @@ func TestShellModulesListIndexOnlyUnderModulePaths(t *testing.T) {
 		t.Fatalf("ls-files scoped to %q, want addons/Kit and vendor/lib", got)
 	}
 }
+
+// 'git rm --cached' on a module file reports it twice (staged deletion and
+// untracked); the feedback comes once, not on every later command.
+func TestShellModuleGitRmCachedFeedbackOnce(t *testing.T) {
+	root := moduleRepo(t)
+	Decide(shell(root, "s1"), now) // snapshot
+	git(t, root, "rm", "-q", "--cached", "vendor/lib/x.go")
+	d := Decide(shell(root, "s1"), now)
+	if !strings.Contains(d.Feedback, "vendor/lib/x.go is inside installed module lib") {
+		t.Fatalf("first: %+v", d)
+	}
+	for i := 0; i < 2; i++ {
+		if d := Decide(shell(root, "s1"), now); d.Feedback != "" {
+			t.Fatalf("repeat %d: %+v", i, d)
+		}
+	}
+}
