@@ -94,3 +94,35 @@ func TestCovered(t *testing.T) {
 		t.Fatalf("got %+v", hits)
 	}
 }
+
+// Modules are capped at MaxModuleMatches and ordered by score, then
+// registry order; the cap and order do not touch the concepts.
+func TestFindModuleCapAndOrderWithConcepts(t *testing.T) {
+	src := findRegistry + `modules:
+  - {id: m1, summary: "Label helper.", paths: ["a/**"], entry: [M1]}
+  - {id: m2, summary: "Label helper.", paths: ["b/**"], covers: [label], entry: [M2]}
+  - {id: label, summary: "Label.", paths: ["c/**"], entry: [Label]}
+  - {id: m4, summary: "Label helper.", paths: ["d/**"], entry: [M4]}
+  - {id: m5, summary: "Label helper.", paths: ["e/**"], entry: [M5]}
+`
+	reg, err := registry.Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Find(reg, findProvides, "label")
+	var ids []string
+	for _, m := range res.Modules {
+		ids = append(ids, m.ID)
+	}
+	// label (id, 6) beats m2 (covers + summary), which beats the
+	// summary-only ones, which keep registry order; m4 and m5 are cut.
+	if got := strings.Join(ids, ","); got != "label,m2,m1" || len(res.Modules) != MaxModuleMatches {
+		t.Fatalf("modules %q, want label,m2,m1", got)
+	}
+	if len(res.Concepts) == 0 || res.Concepts[0].ID != "beads" {
+		t.Fatalf("concepts disturbed by modules: %+v", res.Concepts)
+	}
+	if len(res.Symbols) == 0 {
+		t.Fatalf("symbols disturbed by modules: %+v", res.Symbols)
+	}
+}
