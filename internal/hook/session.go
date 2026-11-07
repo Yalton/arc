@@ -160,7 +160,7 @@ func moduleSubmodules(root string, reg *registry.Registry, st *sessionState) (ma
 	if len(reg.Modules) == 0 {
 		return subs, nil
 	}
-	links, err := gitlinks(root)
+	links, err := gitlinks(root, modulePrefixes(reg)...)
 	if err != nil {
 		return subs, nil
 	}
@@ -188,6 +188,29 @@ func moduleSubmodules(root string, reg *registry.Registry, st *sessionState) (ma
 		}
 	}
 	return subs, feedback
+}
+
+// modulePrefixes returns the literal leading directories of the module
+// path globs, to scope the index listing to them. If any glob starts with
+// a wildcard it returns nil: the whole index is listed.
+func modulePrefixes(reg *registry.Registry) []string {
+	var dirs []string
+	for _, m := range reg.Modules {
+		for _, p := range m.Paths {
+			var lit []string
+			for _, seg := range strings.Split(p, "/") {
+				if strings.ContainsAny(seg, `*?[]{}\`) {
+					break
+				}
+				lit = append(lit, seg)
+			}
+			if len(lit) == 0 || lit[0] == "" {
+				return nil
+			}
+			dirs = append(dirs, strings.Join(lit, "/"))
+		}
+	}
+	return dirs
 }
 
 // firstShellWindow bounds what the first shell command of a session is

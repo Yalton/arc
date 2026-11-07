@@ -380,3 +380,16 @@ func TestWorktreeStatus(t *testing.T) {
 		t.Fatalf("got %v want %v", m, want)
 	}
 }
+
+func TestGitlinksScopedToDirs(t *testing.T) {
+	root, sub := newRepo(t), newRepo(t)
+	git(t, sub, "commit", "-q", "--allow-empty", "-m", "x")
+	for _, p := range []string{"a/one", "b/two"} {
+		git(t, root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, p)
+	}
+	all, _ := Gitlinks(root)
+	one, err := Gitlinks(root, "a")
+	if err != nil || len(all) != 2 || len(one) != 1 || one[0] != "a/one" {
+		t.Fatalf("all %v scoped %v err %v", all, one, err)
+	}
+}
