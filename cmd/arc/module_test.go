@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -378,5 +379,16 @@ func TestModuleSetWritesThroughSymlink(t *testing.T) {
 	}
 	if !strings.Contains(readFile(t, root, "real-registry.yaml"), "id: K") {
 		t.Fatal("target file not updated")
+	}
+}
+
+func TestModuleWithoutSubcommandShowsExample(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"module"}, &stdout, &stderr)
+	if code != exitUsage {
+		t.Fatalf("exit %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr.String(), `arc module set config --summary`) {
+		t.Fatalf("usage lacks an example: %q", stderr.String())
 	}
 }
