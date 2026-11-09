@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -158,9 +160,46 @@ func Parse(data []byte) (*Registry, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&r); err != nil {
-		return nil, fmt.Errorf("%s: %w", Path, err)
+		return nil, fmt.Errorf("%s: %w%s", Path, err, misplacedHint(err))
 	}
 	return &r, nil
+}
+
+// unknownTop matches yaml.v3's error for an unknown key at the root.
+var unknownTop = regexp.MustCompile(`field (\w+) not found in type registry\.Registry`)
+
+// misplacedHint names where a root-level unknown key belongs when it is a
+// field of a nested section (an agent once put a concept's env at the root).
+func misplacedHint(err error) string {
+	m := unknownTop.FindStringSubmatch(err.Error())
+	if m == nil {
+		return ""
+	}
+	var homes []string
+	root := reflect.TypeOf(Registry{})
+	for i := 0; i < root.NumField(); i++ {
+		f := root.Field(i)
+		t, list := f.Type, ""
+		if t.Kind() == reflect.Slice {
+			t, list = t.Elem(), "[]"
+		}
+		if t.Kind() != reflect.Struct {
+			continue
+		}
+		for j := 0; j < t.NumField(); j++ {
+			if strings.Split(t.Field(j).Tag.Get("yaml"), ",")[0] == m[1] {
+				homes = append(homes, yamlName(f)+list+"."+m[1])
+			}
+		}
+	}
+	if len(homes) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n%s is not a top-level key; it goes under %s. Move it and edit the field there.", m[1], strings.Join(homes, " or "))
+}
+
+func yamlName(f reflect.StructField) string {
+	return strings.Split(f.Tag.Get("yaml"), ",")[0]
 }
 
 // Concept returns the concept with id, or nil.

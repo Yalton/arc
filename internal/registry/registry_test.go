@@ -160,3 +160,24 @@ func TestBuiltinIgnore(t *testing.T) {
 		t.Error("only root AGENTS.md is built-in ignored")
 	}
 }
+
+// An agent that put a concept field at the top level (round 1 of Artifactory's
+// tool-value experiment: `env:` under the root) is told where the field goes.
+func TestMisplacedFieldGetsHint(t *testing.T) {
+	_, err := Parse([]byte("version: 1\nsystem: {name: x, summary: y}\nenv: [PORT]\n"))
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	for _, want := range []string{"field env not found", "concepts[].env", "edit the field there"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
+func TestUnknownFieldWithNoHomeGetsNoHint(t *testing.T) {
+	_, err := Parse([]byte("version: 1\nbogus: 1\n"))
+	if err == nil || strings.Contains(err.Error(), "goes under") {
+		t.Fatalf("want a plain unknown-field error, got %v", err)
+	}
+}

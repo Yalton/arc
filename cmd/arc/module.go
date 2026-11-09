@@ -25,7 +25,10 @@ func (s *repeatList) Set(v string) error {
 // runModule dispatches arc module set|rm|list (SPEC.md, "arc module").
 func runModule(out *output, args []string) int {
 	if len(args) == 0 {
-		return out.fail(exitUsage, "module: need a subcommand: set, rm or list")
+		return out.fail(exitUsage, "module: need a subcommand: set, rm or list. Example:\n"+
+			"  arc module set config --summary \"Typed config from the environment\" --import example.com/kits/config --covers config --covers env\n"+
+			"  arc module list\n"+
+			"  arc module rm config")
 	}
 	switch args[0] {
 	case "set":
