@@ -1,0 +1,13 @@
+{
+  "types": [
+    "agent-tool"
+  ],
+  "verify_command": "go build ./... && go test ./... && go vet ./...",
+  "git_authority": {
+    "commit": "agent",
+    "push_branch": "agent",
+    "push_main": "owner",
+    "merge": "pr",
+    "default_branch": "main"
+  }
+}
